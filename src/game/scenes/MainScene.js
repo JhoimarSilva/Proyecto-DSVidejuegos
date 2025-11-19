@@ -29,6 +29,7 @@ export default class MainScene extends Phaser.Scene {
         this._createHud();
         this._createControls();
         this._registerEvents();
+        this.input.mouse.requestPointerLock();
         this.ambiente = this.sound.add('alerta', {
         volume: 0.3,
         loop: true
@@ -36,7 +37,9 @@ export default class MainScene extends Phaser.Scene {
         this.ambiente.play();
 
         this.sonandoAbucheo = false;
-            }
+            
+    }
+
 
     update(_, delta) {
         this._updatePlayerInput();
@@ -158,9 +161,10 @@ export default class MainScene extends Phaser.Scene {
         const forward =
             Number(this.cursors.up.isDown || this.wasd.up.isDown) -
             Number(this.cursors.down.isDown || this.wasd.down.isDown);
+        // Swap left/right so controls feel natural (A = left negative, D = right positive)
         const strafe =
-            Number(this.cursors.right.isDown || this.wasd.right.isDown) -
-            Number(this.cursors.left.isDown || this.wasd.left.isDown);
+            Number(this.cursors.left.isDown || this.wasd.left.isDown) -
+            Number(this.cursors.right.isDown || this.wasd.right.isDown);
 
         const run = Boolean(this.runKey?.isDown);
         const jump = this.jumpKey ? Phaser.Input.Keyboard.JustDown(this.jumpKey) : false;
@@ -175,18 +179,28 @@ export default class MainScene extends Phaser.Scene {
 
         const gameState = this.threeWorld.getGameState();
 
-        // Show button when near queue gap and not caught
-        const shouldShow = gameState.nearQueueGap && !gameState.playerCaught;
+        // Show button when near queue gap OR when player is already in queue (to allow exit)
+        const shouldShow = (gameState.nearQueueGap || gameState.playerInQueue) && !gameState.playerCaught;
         this.queueGapButton.setVisible(shouldShow);
 
         const buttonText = this.children.getByName('queueGapButtonText');
         if (buttonText) {
+            // Update text depending on context
+            if (gameState.playerInQueue) {
+                buttonText.setText('Presiona E para salir de la fila');
+            } else {
+                buttonText.setText('Presiona E para colarte');
+            }
             buttonText.setVisible(shouldShow);
         }
 
         // Handle E key press
         if (shouldShow && this.eKey && Phaser.Input.Keyboard.JustDown(this.eKey)) {
-            this._tryInsertInQueue();
+            if (gameState.playerInQueue) {
+                this.threeWorld.exitPlayerFromQueue();
+            } else if (gameState.nearQueueGap) {
+                this._tryInsertInQueue();
+            }
         }
     }
 
@@ -256,16 +270,25 @@ export default class MainScene extends Phaser.Scene {
                 this.lastPointerX = null;
             },
             move: (pointer) => {
+                if (this.input.mouse.locked) {
+                    this.threeWorld?.rotateCamera(pointer.movementX);
+                    return;
+                }
+
+                // Modo normal (sin pointer lock)
                 if (this.lastPointerX == null) {
                     this.lastPointerX = pointer.x;
                     return;
                 }
+
                 const deltaX = pointer.x - this.lastPointerX;
                 this.lastPointerX = pointer.x;
+
                 if (deltaX !== 0) {
                     this.threeWorld?.rotateCamera(deltaX);
                 }
             }
+
         };
 
         this.input.on('pointerover', this.pointerHandlers.over);
