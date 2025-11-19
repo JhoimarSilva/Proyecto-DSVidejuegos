@@ -7,6 +7,8 @@ export default class MainScene extends Phaser.Scene {
         this.threeWorld = null;
         this.cursors = null;
         this.wasd = null;
+        this.runKey = null;
+        this.jumpKey = null;
         this.lastPointerX = null;
         this.pointerHandlers = null;
     }
@@ -48,7 +50,7 @@ export default class MainScene extends Phaser.Scene {
             .setScrollFactor(0);
 
         this.add
-            .text(16, 70, 'Mueve el mouse para rotar la cámara', {
+            .text(16, 70, 'Shift: Correr | Space: Saltar', {
                 ...style,
                 fontSize: '16px',
                 color: '#c9d1d9'
@@ -57,7 +59,16 @@ export default class MainScene extends Phaser.Scene {
             .setScrollFactor(0);
 
         this.add
-            .text(16, 92, 'Observa los estados de los NPC', {
+            .text(16, 92, 'Mueve el mouse para rotar la cámara', {
+                ...style,
+                fontSize: '16px',
+                color: '#c9d1d9'
+            })
+            .setDepth(10)
+            .setScrollFactor(0);
+
+        this.add
+            .text(16, 114, 'Observa los estados de los NPC', {
                 ...style,
                 fontSize: '16px',
                 color: '#c9d1d9'
@@ -74,6 +85,8 @@ export default class MainScene extends Phaser.Scene {
             down: Phaser.Input.Keyboard.KeyCodes.S,
             right: Phaser.Input.Keyboard.KeyCodes.D
         });
+        this.runKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+        this.jumpKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
         this._setupPointerRotation();
     }
@@ -90,7 +103,10 @@ export default class MainScene extends Phaser.Scene {
             Number(this.cursors.right.isDown || this.wasd.right.isDown) -
             Number(this.cursors.left.isDown || this.wasd.left.isDown);
 
-        this.threeWorld.setPlayerInput({ forward, strafe });
+        const run = Boolean(this.runKey?.isDown);
+        const jump = this.jumpKey ? Phaser.Input.Keyboard.JustDown(this.jumpKey) : false;
+
+        this.threeWorld.setPlayerInput({ forward, strafe, run, jump });
     }
 
     _registerEvents() {
@@ -126,6 +142,8 @@ export default class MainScene extends Phaser.Scene {
     _shutdown() {
         this.scale.off(Phaser.Scale.Events.RESIZE, this._handleResize, this);
         this.events.off(Phaser.Scenes.Events.SHUTDOWN, this._shutdown, this);
+        this.runKey?.destroy();
+        this.jumpKey?.destroy();
         this._teardownPointerRotation();
         this.threeWorld?.destroy();
     }

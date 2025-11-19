@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DEFAULT_NPC_STATE, NPC_STATE_ICONS, getRandomNpcState } from './npcStates.js';
 
-const ENVIRONMENT_MODEL = '/models/Desert.glb';
+const ENVIRONMENT_MODEL = '/models/world.glb';
 const PLAYER_MODEL = '/models/man1.glb';
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
@@ -62,12 +62,21 @@ export class ThreeWorld {
         this.player = {
             group: null,
             mixer: null,
-            action: null,
+            actions: {},
+            activeAction: null,
             headBone: null,
             sprite: null,
-            speed: 3.25,
-            input: { forward: 0, strafe: 0 },
-            velocity: new THREE.Vector3()
+            speed: {
+                walk: 3.25,
+                run: 6
+            },
+            input: { forward: 0, strafe: 0, run: false, jump: false },
+            velocity: new THREE.Vector3(),
+            verticalVelocity: 0,
+            jumpSpeed: 7,
+            gravity: -22,
+            onGround: true,
+            groundHeight: 0
         };
 
         this.npcs = [];
@@ -84,9 +93,11 @@ export class ThreeWorld {
         );
     }
 
-    setPlayerInput({ forward = 0, strafe = 0 } = {}) {
+    setPlayerInput({ forward = 0, strafe = 0, run = false, jump = false } = {}) {
         this.player.input.forward = THREE.MathUtils.clamp(forward, -1, 1);
         this.player.input.strafe = THREE.MathUtils.clamp(strafe, -1, 1);
+        this.player.input.run = Boolean(run);
+        this.player.input.jump = this.player.input.jump || Boolean(jump);
     }
 
     update(deltaMs = 0) {
@@ -196,11 +207,8 @@ export class ThreeWorld {
 
                 if (gltf.animations?.length) {
                     this.player.mixer = new THREE.AnimationMixer(gltf.scene);
-                    const clip = this._findWalkClip(gltf.animations);
-                    if (clip) {
-                        this.player.action = this.player.mixer.clipAction(clip);
-                        this.player.action.play();
-                    }
+                    this.player.actions = this._buildPlayerActions(gltf.animations);
+                    this._setPlayerAction('idle');
                 }
             },
             undefined,
@@ -298,29 +306,32 @@ export class ThreeWorld {
             this.player.mixer.update(deltaSeconds);
         }
 
-        const hasInput =
+        const hasMoveInput =
             Math.abs(this.player.input.forward) > 0.01 || Math.abs(this.player.input.strafe) > 0.01;
 
-        if (this.player.action) {
-            this.player.action.paused = !hasInput;
+        if (this.player.input.jump && this.player.onGround) {
+            this.player.verticalVelocity = this.player.jumpSpeed;
+            this.player.onGround = false;
         }
+        this.player.input.jump = false;
 
-        if (hasInput) {
+        if (hasMoveInput) {
             const cameraOffset = this._getCameraOffset();
             const forwardDir = cameraOffset.clone().multiplyScalar(-1);
             forwardDir.y = 0;
 
             if (forwardDir.lengthSq() > 0.0001) {
                 forwardDir.normalize();
-                const rightDir = new THREE.Vector3().crossVectors(forwardDir, WORLD_UP).normalize();
+                const rightDir = new THREE.Vector3().crossVectors(WORLD_UP, forwardDir).normalize();
 
                 this.player.velocity.copy(forwardDir).multiplyScalar(this.player.input.forward);
                 this.player.velocity.addScaledVector(rightDir, this.player.input.strafe);
 
                 if (this.player.velocity.lengthSq() > 0.0001) {
+                    const speed = this.player.input.run ? this.player.speed.run : this.player.speed.walk;
                     this.player.velocity
                         .normalize()
-                        .multiplyScalar(this.player.speed * deltaSeconds);
+                        .multiplyScalar(speed * deltaSeconds);
 
                     this.player.group.position.add(this.player.velocity);
 
@@ -328,7 +339,31 @@ export class ThreeWorld {
                     this.player.group.rotation.y = targetAngle;
                 }
             }
+        } else {
+            this.player.velocity.set(0, 0, 0);
         }
+
+        if (!this.player.onGround || this.player.verticalVelocity !== 0) {
+            this.player.verticalVelocity += this.player.gravity * deltaSeconds;
+            this.player.group.position.y += this.player.verticalVelocity * deltaSeconds;
+
+            if (this.player.group.position.y <= this.player.groundHeight) {
+                this.player.group.position.y = this.player.groundHeight;
+                this.player.verticalVelocity = 0;
+                this.player.onGround = true;
+            } else if (this.player.verticalVelocity < 0) {
+                this.player.onGround = false;
+            }
+        }
+
+        const horizontalSpeedSq = this.player.velocity.lengthSq();
+        let desiredAction = 'idle';
+        if (!this.player.onGround) {
+            desiredAction = 'jump';
+        } else if (horizontalSpeedSq > 0.0001) {
+            desiredAction = this.player.input.run ? 'run' : 'walk';
+        }
+        this._setPlayerAction(desiredAction);
 
         if (this.player.headBone && this.player.sprite) {
             this.player.headBone.getWorldPosition(this.tempVector);
@@ -387,6 +422,94 @@ export class ThreeWorld {
                 oldMaterial.dispose();
             }
         });
+    }
+
+    _buildPlayerActions(animations = []) {
+        if (!this.player.mixer) {
+            return {};
+        }
+
+        const actionMap = {
+            idle: ['Idle', 'CharacterArmature|Idle', 'idle'],
+            walk: ['Walk', 'CharacterArmature|Walk', 'walk'],
+            run: ['Run', 'CharacterArmature|Run', 'run'],
+            jump: ['Jump', 'CharacterArmature|Jump', 'jump']
+        };
+
+        const actions = {};
+        Object.entries(actionMap).forEach(([key, candidates]) => {
+            const clip = this._findClipByNames(animations, candidates);
+            if (!clip) {
+                return;
+            }
+            const action = this.player.mixer.clipAction(clip);
+            if (key === 'jump') {
+                action.setLoop(THREE.LoopOnce, 0);
+                action.clampWhenFinished = true;
+            }
+            actions[key] = action;
+        });
+
+        if (!actions.walk) {
+            const fallbackClip = animations[0];
+            if (fallbackClip) {
+                actions.walk = this.player.mixer.clipAction(fallbackClip);
+            }
+        }
+
+        if (!actions.idle && actions.walk) {
+            actions.idle = actions.walk;
+        }
+
+        if (!actions.run && actions.walk) {
+            actions.run = actions.walk;
+        }
+
+        if (!actions.jump && actions.run) {
+            actions.jump = actions.run;
+        }
+
+        return actions;
+    }
+
+    _setPlayerAction(name) {
+        if (!this.player.mixer) {
+            return;
+        }
+
+        const nextAction =
+            this.player.actions[name] ??
+            this.player.actions.walk ??
+            this.player.actions.idle ??
+            null;
+
+        if (!nextAction || this.player.activeAction === nextAction) {
+            return;
+        }
+
+        nextAction.reset().fadeIn(0.15).play();
+        if (this.player.activeAction && this.player.activeAction !== nextAction) {
+            this.player.activeAction.fadeOut(0.15);
+        }
+        this.player.activeAction = nextAction;
+    }
+
+    _findClipByNames(animations = [], names = []) {
+        for (const name of names) {
+            const lowered = name.toLowerCase();
+            let clip = THREE.AnimationClip.findByName(animations, name);
+            if (clip) {
+                return clip;
+            }
+            clip = animations.find((candidate) => {
+                const candidateName = candidate.name?.toLowerCase() ?? '';
+                return candidateName === lowered || candidateName.includes(lowered);
+            });
+            if (clip) {
+                return clip;
+            }
+        }
+        return animations.length ? animations[0] : null;
     }
 
     _findHeadBone(root) {
