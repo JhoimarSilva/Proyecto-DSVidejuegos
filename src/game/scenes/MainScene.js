@@ -15,6 +15,12 @@ export default class MainScene extends Phaser.Scene {
         this.eKey = null;
     }
 
+    preload() {
+    this.load.audio('alerta', '/sounds/ambiente.wav');
+    this.load.audio('descubierto', '/sounds/abucheos.wav');
+    }
+
+
     create() {
         this._configurePhaserCanvas();
         const container = document.getElementById('game-container');
@@ -23,12 +29,35 @@ export default class MainScene extends Phaser.Scene {
         this._createHud();
         this._createControls();
         this._registerEvents();
-    }
+        this.ambiente = this.sound.add('alerta', {
+        volume: 0.3,
+        loop: true
+        });
+        this.ambiente.play();
+
+        this.sonandoAbucheo = false;
+            }
 
     update(_, delta) {
         this._updatePlayerInput();
         this._updateQueueGapUI();
         this.threeWorld?.update(delta);
+    }
+
+    detectarJugador() {
+
+    if (this.sonandoAbucheo) return;
+    this.sonandoAbucheo = true;
+
+    this.sound.play('descubierto', {
+        volume: 1
+    });
+
+    console.log("¡Jugador detectado!");
+
+    this.time.delayedCall(1500, () => {
+        this.sonandoAbucheo = false;
+    });
     }
 
     _createHud() {
