@@ -582,11 +582,13 @@ export class ThreeWorld {
         }
         this._setPlayerAction(desiredAction);
 
-        // If player is in queue, snap to queue position (but still follow cycle)
+        // Si el jugador está en la fila, se mantiene en posición sincronizado con NPCs
         if (this.gameState.playerInQueue && this.player.queueIndex !== null) {
             const desired = this._getQueuePosition(this.player.queueIndex);
-            // smoothly follow queue position (so player moves with NPCs)
-            this.player.group.position.lerp(desired, 1 - Math.exp(-8 * deltaSeconds));
+            // Solo seguir si no hay movimiento en cola activo
+            if (!this.player.queueMove?.active) {
+                this.player.group.position.lerp(desired, 1 - Math.exp(-8 * deltaSeconds));
+            }
         }
 
         // Update sprite if any
@@ -919,7 +921,7 @@ export class ThreeWorld {
         this.player.group.rotation.y = Math.atan2(dir.x, dir.z);
 
         this.gameState.playerInQueue = true;
-        this.gameState.queueGapIndex = null;  // ya no hay hueco
+        this.gameState.queueGapIndex = null;
     }
 
     _isCaughtByAlertNpc() {
@@ -937,28 +939,33 @@ export class ThreeWorld {
     // Player exits the queue: remove queue flags and move player aside
     exitPlayerFromQueue() {
         if (!this.gameState.playerInQueue) return false;
+        if (!this.player.group) return false;
 
         const prevIndex = this.player.queueIndex;
+        if (prevIndex === null || prevIndex === undefined) return false;
 
-        // 1. Mover jugador hacia la derecha de la fila
+        // 1. Mover jugador hacia la derecha de la fila (fuera de ella)
         const right = new THREE.Vector3()
             .crossVectors(WORLD_UP, this.queueConfig.direction)
             .normalize();
 
         const sidePos = this.player.group.position.clone()
-            .add(right.multiplyScalar(this.queueConfig.spacing * 1.5));
+            .add(right.multiplyScalar(this.queueConfig.spacing * 2));
 
         this.player.group.position.copy(sidePos);
         this.player.queueIndex = null;
-        if (this.player.queueMove) this.player.queueMove.active = false;
+        
+        // Detener movimiento en la fila
+        if (this.player.queueMove) {
+            this.player.queueMove.active = false;
+        }
 
+        // Restaurar controles de movimiento libre
         this._setPlayerAction('idle');
         this.gameState.playerInQueue = false;
+        this.player.input = { forward: 0, strafe: 0, run: false, jump: false };
 
-        // 2. Crear un gap REAL
-        this.gameState.queueGapIndex = prevIndex;
-
-        // 3. Empujar NPCs hacia adelante para abrir el hueco
+        // 2. Empujar NPCs hacia adelante para abrir el hueco en donde estaba el jugador
         const orderedNPCs = [...this.npcs].sort((a, b) => a.queueIndex - b.queueIndex);
 
         orderedNPCs.forEach(npc => {
@@ -971,6 +978,9 @@ export class ThreeWorld {
                 npc.queueMove.active = true;
             }
         });
+
+        // 3. Crear gap en el lugar donde salió el jugador
+        this.gameState.queueGapIndex = prevIndex;
 
         return true;
     }
