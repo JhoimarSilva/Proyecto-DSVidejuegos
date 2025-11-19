@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DEFAULT_NPC_STATE, NPC_STATE_ICONS, getRandomNpcState, NON_ALERT_STATES, setAllNpcsAngry } from './npcStates.js';
+import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';
+import { DEFAULT_NPC_STATE, NPC_STATE_ICONS, getRandomNpcState, NON_ALERT_STATES, setAllNpcsAngry, setAllNpcsDistracted } from './npcStates.js';
 
 const ENVIRONMENT_MODEL = '/models/world.glb';
 const PLAYER_MODEL = '/models/man1.glb';
@@ -58,6 +59,29 @@ export class ThreeWorld {
 
         this.loader = new GLTFLoader();
         this.textureLoader = new THREE.TextureLoader();
+        this.exrLoader = new EXRLoader();
+        this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+        this.pmremGenerator.compileEquirectangularShader();
+
+        // Load HDRI environment (EXR) for sky and environment lighting
+        this.exrLoader.load(
+            '/sky/kloppenheim_06_puresky_1k.exr',
+            (texture) => {
+                try {
+                    const envMap = this.pmremGenerator.fromEquirectangular(texture).texture;
+                    this.scene.background = envMap;
+                    this.scene.environment = envMap;
+                } finally {
+                    texture.dispose();
+                    // pmremGenerator can be disposed after generating the env map
+                    this.pmremGenerator.dispose();
+                }
+            },
+            undefined,
+            (error) => {
+                console.error('Error cargando HDRI:', error);
+            }
+        );
         this.clock = new THREE.Clock();
 
         this.player = {
@@ -83,7 +107,7 @@ export class ThreeWorld {
 
         this.npcs = [];
         this.queueConfig = {
-            root: new THREE.Vector3(-2, 0, -4),
+            root: new THREE.Vector3(-5, 0, -4),
             direction: new THREE.Vector3(0, 0, 1).normalize(),
             spacing: 1.8,
             advanceInterval: 10,
@@ -100,7 +124,12 @@ export class ThreeWorld {
             gapChangeInterval: 15,
             gapChangeTimer: 0,
             detectionThreshold: 2.5,
-            detectionRange: 3
+            detectionRange: 3,
+            // Global distraction window: periodically all NPCs are distracted
+            globalDistractInterval: 25,
+            globalDistractDuration: 5,
+            globalDistractTimer: 0,
+            globalDistractActive: false
         };
 
         // Cycle for queue walking/idle
@@ -139,6 +168,7 @@ export class ThreeWorld {
 
         this._updatePlayer(deltaSeconds);
         this._updateQueue(deltaSeconds);
+        this._updateGlobalDistract(deltaSeconds);
         this._updateNpcs(deltaSeconds);
         this._updateQueueCutting(deltaSeconds);
         this._updateCamera(deltaSeconds);
@@ -549,23 +579,32 @@ export class ThreeWorld {
         this.npcs.forEach((npc) => {
             npc.mixer?.update(deltaSeconds * 0.5);
 
-            // distraction / alert logic (staggered per npc)
-            npc.distractionTimer = (npc.distractionTimer ?? 0) + deltaSeconds;
-            const totalCycle = 16; // full cycle
-            const distractedWindow = 6; // seconds distracted
-            const pos = npc.distractionTimer % totalCycle;
-
-            if (pos < distractedWindow) {
-                // distracted
+            // distraction / alert logic
+            if (this.gameState.globalDistractActive) {
+                // Global window: all NPCs are distracted unless already angry
                 if (npc.stateKey !== 'angry') {
                     npc.stateKey = 'distracted';
                     this._applySpriteTexture(npc.sprite, 'distracted');
                 }
             } else {
-                // alert
-                if (npc.stateKey !== 'angry' && npc.stateKey !== 'alert') {
-                    npc.stateKey = 'alert';
-                    this._applySpriteTexture(npc.sprite, 'alert');
+                // Staggered per-NPC cycles when no global window
+                npc.distractionTimer = (npc.distractionTimer ?? 0) + deltaSeconds;
+                const totalCycle = 16; // full cycle
+                const distractedWindow = 6; // seconds distracted
+                const pos = npc.distractionTimer % totalCycle;
+
+                if (pos < distractedWindow) {
+                    // distracted
+                    if (npc.stateKey !== 'angry') {
+                        npc.stateKey = 'distracted';
+                        this._applySpriteTexture(npc.sprite, 'distracted');
+                    }
+                } else {
+                    // alert
+                    if (npc.stateKey !== 'angry' && npc.stateKey !== 'alert') {
+                        npc.stateKey = 'alert';
+                        this._applySpriteTexture(npc.sprite, 'alert');
+                    }
                 }
             }
 
@@ -689,6 +728,32 @@ export class ThreeWorld {
         if (this._isNearQueueGap()) {
             if (this._isCaughtByAlertNpc()) {
                 this._playerCaught();
+            }
+        }
+    }
+
+    _updateGlobalDistract(deltaSeconds) {
+        const gs = this.gameState;
+        if (!this.npcs.length) return;
+
+        gs.globalDistractTimer += deltaSeconds;
+
+        if (gs.globalDistractActive) {
+            // currently active, check duration
+            if (gs.globalDistractTimer >= gs.globalDistractDuration) {
+                gs.globalDistractTimer = 0;
+                gs.globalDistractActive = false;
+                // After the global window ends, reset individual timers so NPCs resume staggered cycles
+                this.npcs.forEach(npc => npc.distractionTimer = Math.random() * (gs.globalDistractInterval || 12));
+            }
+        } else {
+            // not active, check if it's time to start the window
+            if (gs.globalDistractTimer >= gs.globalDistractInterval) {
+                gs.globalDistractTimer = 0;
+                gs.globalDistractActive = true;
+                // set all NPCs distracted for the window
+                setAllNpcsDistracted(this.npcs);
+                this.npcs.forEach(npc => this._applySpriteTexture(npc.sprite, 'distracted'));
             }
         }
     }

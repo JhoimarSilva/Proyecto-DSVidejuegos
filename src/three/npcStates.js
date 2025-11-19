@@ -33,3 +33,11 @@ export function setAllNpcsAngry(npcs) {
     });
 }
 
+export function setAllNpcsDistracted(npcs) {
+    npcs.forEach((npc) => {
+        npc.stateKey = 'distracted';
+        // reset their individual timers so they stay distracted for a short window
+        npc.distractionTimer = 0;
+    });
+}
+
