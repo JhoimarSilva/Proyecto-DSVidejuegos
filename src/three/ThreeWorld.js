@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js';
+import { Audio, AudioListener, AudioLoader } from 'three';
 import { DEFAULT_NPC_STATE, NPC_STATE_ICONS, getRandomNpcState, NON_ALERT_STATES, setAllNpcsAngry, setAllNpcsDistracted } from './npcStates.js';
 
 const ENVIRONMENT_MODEL = '/models/world.glb';
@@ -27,6 +28,8 @@ const NPC_POSITIONS = [
 
 export class ThreeWorld {
     constructor(parentElement) {
+
+
         this.parentElement = parentElement ?? document.body;
 
         this.scene = new THREE.Scene();
@@ -149,6 +152,18 @@ export class ThreeWorld {
             this.parentElement.clientWidth || window.innerWidth,
             this.parentElement.clientHeight || window.innerHeight
         );
+
+        this.listener = new AudioListener();
+        this.camera.add(this.listener);
+        
+        //Sonido de abucheos
+        this.booSound = new Audio(this.listener);
+        this.audioLoader = new AudioLoader();
+        this.audioLoader.load('/sounds/abucheos.wav', (buffer) => {
+            this.booSound.setBuffer(buffer);
+            this.booSound.setVolume(1.0);
+        });
+
     }
 
     // -------------------------
@@ -853,6 +868,10 @@ export class ThreeWorld {
             npc.stateKey = 'angry';
             this._applySpriteTexture(npc.sprite, 'angry');
         });
+        //Activa los abucheos
+        if (this.booSound && !this.booSound.isPlaying) {
+        this.booSound.play();
+        }
     }
 
     _insertPlayerAtQueueIndex(index) {
