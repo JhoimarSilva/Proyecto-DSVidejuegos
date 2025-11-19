@@ -1,15 +1,20 @@
 {
   "name": "proyecto-dsvidejuegos",
   "version": "1.0.0",
-  "description": "",
+  "description": "Proyecto base que integra Phaser como motor y Three.js para 3D",
   "main": "index.js",
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "three": "^0.181.1"
+    "phaser": "^3.90.0",
+    "three": "^0.181.1",
+    "vite": "^7.2.2"
   }
 }
