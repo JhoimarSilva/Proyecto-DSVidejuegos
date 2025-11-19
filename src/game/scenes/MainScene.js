@@ -11,6 +11,8 @@ export default class MainScene extends Phaser.Scene {
         this.jumpKey = null;
         this.lastPointerX = null;
         this.pointerHandlers = null;
+        this.queueGapButton = null;
+        this.eKey = null;
     }
 
     create() {
@@ -25,6 +27,7 @@ export default class MainScene extends Phaser.Scene {
 
     update(_, delta) {
         this._updatePlayerInput();
+        this._updateQueueGapUI();
         this.threeWorld?.update(delta);
     }
 
@@ -75,6 +78,32 @@ export default class MainScene extends Phaser.Scene {
             })
             .setDepth(10)
             .setScrollFactor(0);
+
+        // Create queue gap button (initially hidden)
+        this.queueGapButton = this.add
+            .rectangle(window.innerWidth / 2, window.innerHeight - 80, 200, 50, 0x00aa00)
+            .setDepth(100)
+            .setScrollFactor(0)
+            .setInteractive()
+            .on('pointerdown', () => this._tryInsertInQueue())
+            .setVisible(false);
+
+        this.add
+            .text(
+                window.innerWidth / 2,
+                window.innerHeight - 80,
+                'Presiona E para colarte',
+                {
+                    ...style,
+                    fontSize: '14px',
+                    color: '#000000'
+                }
+            )
+            .setOrigin(0.5)
+            .setDepth(101)
+            .setScrollFactor(0)
+            .setVisible(false)
+            .setName('queueGapButtonText');
     }
 
     _createControls() {
@@ -87,6 +116,7 @@ export default class MainScene extends Phaser.Scene {
         });
         this.runKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
         this.jumpKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+        this.eKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
 
         this._setupPointerRotation();
     }
@@ -107,6 +137,41 @@ export default class MainScene extends Phaser.Scene {
         const jump = this.jumpKey ? Phaser.Input.Keyboard.JustDown(this.jumpKey) : false;
 
         this.threeWorld.setPlayerInput({ forward, strafe, run, jump });
+    }
+
+    _updateQueueGapUI() {
+        if (!this.threeWorld || !this.queueGapButton) {
+            return;
+        }
+
+        const gameState = this.threeWorld.getGameState();
+
+        // Show button when near queue gap and not caught
+        const shouldShow = gameState.nearQueueGap && !gameState.playerCaught;
+        this.queueGapButton.setVisible(shouldShow);
+
+        const buttonText = this.children.getByName('queueGapButtonText');
+        if (buttonText) {
+            buttonText.setVisible(shouldShow);
+        }
+
+        // Handle E key press
+        if (shouldShow && this.eKey && Phaser.Input.Keyboard.JustDown(this.eKey)) {
+            this._tryInsertInQueue();
+        }
+    }
+
+    _tryInsertInQueue() {
+        if (!this.threeWorld) {
+            return;
+        }
+
+        const gameState = this.threeWorld.getGameState();
+        if (!gameState.nearQueueGap) {
+            return;
+        }
+
+        this.threeWorld.insertPlayerInQueue(gameState.queueGapIndex);
     }
 
     _registerEvents() {
@@ -144,6 +209,7 @@ export default class MainScene extends Phaser.Scene {
         this.events.off(Phaser.Scenes.Events.SHUTDOWN, this._shutdown, this);
         this.runKey?.destroy();
         this.jumpKey?.destroy();
+        this.eKey?.destroy();
         this._teardownPointerRotation();
         this.threeWorld?.destroy();
     }

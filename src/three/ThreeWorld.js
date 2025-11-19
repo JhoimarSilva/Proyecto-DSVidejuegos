@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DEFAULT_NPC_STATE, NPC_STATE_ICONS, getRandomNpcState } from './npcStates.js';
+import { DEFAULT_NPC_STATE, NPC_STATE_ICONS, getRandomNpcState, NON_ALERT_STATES, setAllNpcsAngry } from './npcStates.js';
 
 const ENVIRONMENT_MODEL = '/models/world.glb';
 const PLAYER_MODEL = '/models/man1.glb';
@@ -77,11 +77,39 @@ export class ThreeWorld {
             jumpSpeed: 7,
             gravity: -22,
             onGround: true,
-            groundHeight: 0
+            groundHeight: 0,
+            queueIndex: null
         };
 
         this.npcs = [];
+        this.queueConfig = {
+            root: new THREE.Vector3(-2, 0, -4),
+            direction: new THREE.Vector3(0, 0, 1).normalize(),
+            spacing: 1.8,
+            advanceInterval: 10,
+            moveDuration: 1.2,
+            timer: 0
+        };
         this.tempVector = new THREE.Vector3();
+
+        // Game state for queue cutting mechanics
+        this.gameState = {
+            playerCaught: false,
+            playerInQueue: false,
+            queueGapIndex: null,
+            gapChangeInterval: 15,
+            gapChangeTimer: 0,
+            detectionThreshold: 2.5,
+            detectionRange: 3
+        };
+
+        // Cycle for queue walking/idle
+        this.queueCycle = {
+            timer: 0,
+            walkTime: 5,
+            idleTime: 7,
+            cycleDuration: 12 // walkTime + idleTime
+        };
 
         this._addLights();
         this._loadEnvironment();
@@ -94,6 +122,9 @@ export class ThreeWorld {
         );
     }
 
+    // -------------------------
+    // Public API / Inputs
+    // -------------------------
     setPlayerInput({ forward = 0, strafe = 0, run = false, jump = false } = {}) {
         this.player.input.forward = THREE.MathUtils.clamp(forward, -1, 1);
         this.player.input.strafe = THREE.MathUtils.clamp(strafe, -1, 1);
@@ -104,12 +135,12 @@ export class ThreeWorld {
     update(deltaMs = 0) {
         const deltaSeconds = deltaMs ? deltaMs / 1000 : this.clock.getDelta();
 
-        if (!Number.isFinite(deltaSeconds)) {
-            return;
-        }
+        if (!Number.isFinite(deltaSeconds)) return;
 
         this._updatePlayer(deltaSeconds);
+        this._updateQueue(deltaSeconds);
         this._updateNpcs(deltaSeconds);
+        this._updateQueueCutting(deltaSeconds);
         this._updateCamera(deltaSeconds);
 
         this.renderer.render(this.scene, this.camera);
@@ -135,10 +166,78 @@ export class ThreeWorld {
     }
 
     changeStateIcon(stateKey) {
-        if (!this.player.sprite) {
-            return;
-        }
+        if (!this.player.sprite) return;
         this._applySpriteTexture(this.player.sprite, stateKey);
+    }
+
+    getGameState() {
+        return {
+            playerCaught: this.gameState.playerCaught,
+            playerInQueue: this.gameState.playerInQueue,
+            npcsAngry: this.npcs.some((npc) => npc.stateKey === 'angry'),
+            nearQueueGap: this._isNearQueueGap(),
+            queueGapIndex: this.gameState.queueGapIndex,
+            queueGapPosition: this.gameState.queueGapIndex !== null ? this._getQueuePosition(this.gameState.queueGapIndex) : null
+        };
+    }
+
+    resetGameState() {
+        this.gameState.playerCaught = false;
+        this.gameState.playerInQueue = false;
+        this.npcs.forEach((npc) => {
+            npc.stateKey = getRandomNpcState();
+            npc.distractionTimer = 0;
+            this._applySpriteTexture(npc.sprite, npc.stateKey);
+        });
+    }
+
+    // Try to insert at current gap (must be near and all distracted)
+    insertPlayerInQueue(queueIndex = null) {
+        if (!this.player.group) return false;
+        if (this.gameState.queueGapIndex === null) return false;
+        if (!this._isNearQueueGap()) return false;
+
+        if (!this._canPlayerInsert()) {
+            this._playerCaught();
+            return false;
+        }
+
+        const insertIndex = this.gameState.queueGapIndex;
+        this._insertPlayerAtQueueIndex(insertIndex);
+        return true;
+    }
+
+    // Attempt to move the player forward in the queue to a specific index (only if all distracted)
+    movePlayerToQueueIndex(newIndex) {
+        if (!this.gameState.playerInQueue) return false;
+        if (!this._canPlayerInsert()) {
+            this._playerCaught();
+            return false;
+        }
+
+        if (newIndex < 0) newIndex = 0;
+
+        // Clamp to current queue length
+        const maxIndex = Math.max(0, this.npcs.length);
+        if (newIndex > maxIndex) newIndex = maxIndex;
+
+        // Reorder NPCs indices to make room
+        this.npcs.forEach((npc) => {
+            if (npc.queueIndex >= newIndex) {
+                npc.queueIndex += 1;
+                npc.queueMove.start.copy(npc.group.position);
+                npc.queueMove.target.copy(this._getQueuePosition(npc.queueIndex));
+                npc.queueMove.elapsed = 0;
+                npc.queueMove.duration = this.queueConfig.moveDuration;
+                npc.queueMove.active = true;
+            }
+        });
+
+        this.player.queueIndex = newIndex;
+        const pos = this._getQueuePosition(newIndex);
+        this.player.group.position.copy(pos);
+
+        return true;
     }
 
     destroy() {
@@ -147,9 +246,7 @@ export class ThreeWorld {
         }
 
         this.scene.traverse((obj) => {
-            if (!obj.isMesh) {
-                return;
-            }
+            if (!obj.isMesh) return;
             obj.geometry?.dispose();
             if (Array.isArray(obj.material)) {
                 obj.material.forEach((material) => {
@@ -165,6 +262,9 @@ export class ThreeWorld {
         this.renderer.dispose();
     }
 
+    // -------------------------
+    // Loaders & Scene setup
+    // -------------------------
     _addLights() {
         const hemi = new THREE.HemisphereLight(0xffffff, 0x3f3f70, 1.15);
         this.scene.add(hemi);
@@ -220,9 +320,7 @@ export class ThreeWorld {
 
     _normalizeEnvironment(root) {
         const bounds = new THREE.Box3().setFromObject(root);
-        if (bounds.isEmpty()) {
-            return;
-        }
+        if (bounds.isEmpty()) return;
 
         const center = new THREE.Vector3();
         bounds.getCenter(center);
@@ -242,20 +340,12 @@ export class ThreeWorld {
     }
 
     _prepareCharacterModel(root, targetHeight = CHARACTER_TARGET_HEIGHT) {
-        if (!root) {
-            return;
-        }
-
+        if (!root) return;
         const bounds = new THREE.Box3().setFromObject(root);
-        if (bounds.isEmpty()) {
-            return;
-        }
-
+        if (bounds.isEmpty()) return;
         const size = new THREE.Vector3();
         bounds.getSize(size);
-        if (size.y <= 0.0001) {
-            return;
-        }
+        if (size.y <= 0.0001) return;
 
         const uniformScale = targetHeight / size.y;
         root.scale.setScalar(uniformScale);
@@ -277,15 +367,37 @@ export class ThreeWorld {
         );
     }
 
+    // -------------------------
+    // Queue & NPC helpers
+    // -------------------------
+    _getQueuePosition(index) {
+        const { root, direction, spacing } = this.queueConfig;
+        return root.clone().add(direction.clone().multiplyScalar(index * spacing));
+    }
+
+    _assignNpcToQueue(npc, index) {
+        npc.queueIndex = index;
+        const position = this._getQueuePosition(index);
+        npc.group.position.copy(position);
+        npc.queueMove = {
+            start: position.clone(),
+            target: position.clone(),
+            elapsed: 0,
+            duration: this.queueConfig.moveDuration,
+            active: false
+        };
+    }
+
     _spawnNpcs() {
-        NPC_POSITIONS.forEach((position, index) => {
+        // spawn initial NPCs using NPC_POOL
+        NPC_POSITIONS.forEach((_, index) => {
             const modelPath = NPC_POOL[index % NPC_POOL.length];
             const state = getRandomNpcState();
-            this._loadNpc(modelPath, position, state);
+            this._loadNpc(modelPath, state);
         });
     }
 
-    _loadNpc(modelPath, position, stateKey) {
+    _loadNpc(modelPath, stateKey) {
         this.loader.load(
             modelPath,
             (gltf) => {
@@ -294,7 +406,6 @@ export class ThreeWorld {
 
                 const npcGroup = new THREE.Group();
                 npcGroup.add(model);
-                npcGroup.position.copy(position);
                 this.scene.add(npcGroup);
 
                 const headBone = this._findHeadBone(gltf.scene);
@@ -306,20 +417,46 @@ export class ThreeWorld {
                     headBone,
                     sprite,
                     stateKey,
-                    mixer: null
+                    mixer: null,
+                    actions: {},
+                    role: 'queue',
+                    queueIndex: this.npcs.length,
+                    queueMove: {
+                        start: new THREE.Vector3(),
+                        target: new THREE.Vector3(),
+                        elapsed: 0,
+                        duration: this.queueConfig.moveDuration,
+                        active: false
+                    },
+                    distractionTimer: Math.random() * 8 // staggered distraction cycles
                 };
 
                 if (gltf.animations?.length) {
                     npcData.mixer = new THREE.AnimationMixer(gltf.scene);
-                    const clip = this._findWalkClip(gltf.animations);
-                    if (clip) {
-                        const action = npcData.mixer.clipAction(clip);
-                        action.timeScale = 0.3;
-                        action.play();
+
+                    // Try to get walk and idle clips
+                    const walkClip = this._findWalkClip(gltf.animations);
+                    const idleClip = THREE.AnimationClip.findByName(gltf.animations, 'Idle') ?? gltf.animations.find(c => (c.name||'').toLowerCase().includes('idle'));
+                    if (walkClip) {
+                        npcData.actions.walk = npcData.mixer.clipAction(walkClip);
+                        npcData.actions.walk.setEffectiveTimeScale(1);
                     }
+                    if (idleClip) {
+                        npcData.actions.idle = npcData.mixer.clipAction(idleClip);
+                    }
+
+                    // If none found, create fallback using first clip as "walk"
+                    if (!npcData.actions.walk && gltf.animations[0]) {
+                        npcData.actions.walk = npcData.mixer.clipAction(gltf.animations[0]);
+                    }
+
+                    // Ensure actions start in paused state
+                    Object.values(npcData.actions).forEach(a => a && a.play && (a.paused = true));
                 }
 
+                this._assignNpcToQueue(npcData, npcData.queueIndex);
                 this.npcs.push(npcData);
+                this._applySpriteTexture(sprite, stateKey);
             },
             undefined,
             (error) => {
@@ -328,14 +465,13 @@ export class ThreeWorld {
         );
     }
 
+    // -------------------------
+    // Player update (camera-relative movement)
+    // -------------------------
     _updatePlayer(deltaSeconds) {
-        if (!this.player.group) {
-            return;
-        }
+        if (!this.player.group) return;
 
-        if (this.player.mixer) {
-            this.player.mixer.update(deltaSeconds);
-        }
+        if (this.player.mixer) this.player.mixer.update(deltaSeconds);
 
         const hasMoveInput =
             Math.abs(this.player.input.forward) > 0.01 || Math.abs(this.player.input.strafe) > 0.01;
@@ -346,34 +482,32 @@ export class ThreeWorld {
         }
         this.player.input.jump = false;
 
-        if (hasMoveInput) {
-            const cameraOffset = this._getCameraOffset();
-            const forwardDir = cameraOffset.clone().multiplyScalar(-1);
-            forwardDir.y = 0;
+        // Camera-relative directions
+        const cameraDirection = new THREE.Vector3();
+        this.camera.getWorldDirection(cameraDirection);
+        cameraDirection.y = 0;
+        if (cameraDirection.lengthSq() > 0.000001) cameraDirection.normalize();
 
-            if (forwardDir.lengthSq() > 0.0001) {
-                forwardDir.normalize();
-                const rightDir = new THREE.Vector3().crossVectors(WORLD_UP, forwardDir).normalize();
+        // right = up x forward (gives right-hand)
+        const cameraRight = new THREE.Vector3().crossVectors(WORLD_UP, cameraDirection).normalize();
 
-                this.player.velocity.copy(forwardDir).multiplyScalar(this.player.input.forward);
-                this.player.velocity.addScaledVector(rightDir, this.player.input.strafe);
+        // Reset velocity then apply inputs
+        this.player.velocity.set(0, 0, 0);
+        this.player.velocity.addScaledVector(cameraDirection, this.player.input.forward);
+        this.player.velocity.addScaledVector(cameraRight, this.player.input.strafe);
 
-                if (this.player.velocity.lengthSq() > 0.0001) {
-                    const speed = this.player.input.run ? this.player.speed.run : this.player.speed.walk;
-                    this.player.velocity
-                        .normalize()
-                        .multiplyScalar(speed * deltaSeconds);
+        if (this.player.velocity.lengthSq() > 0.0001) {
+            const speed = this.player.input.run ? this.player.speed.run : this.player.speed.walk;
+            this.player.velocity.normalize().multiplyScalar(speed * deltaSeconds);
+            this.player.group.position.add(this.player.velocity);
 
-                    this.player.group.position.add(this.player.velocity);
-
-                    const targetAngle = Math.atan2(this.player.velocity.x, this.player.velocity.z);
-                    this.player.group.rotation.y = targetAngle;
-                }
-            }
+            const targetAngle = Math.atan2(this.player.velocity.x, this.player.velocity.z);
+            this.player.group.rotation.y = targetAngle;
         } else {
             this.player.velocity.set(0, 0, 0);
         }
 
+        // vertical physics (jump/gravity)
         if (!this.player.onGround || this.player.verticalVelocity !== 0) {
             this.player.verticalVelocity += this.player.gravity * deltaSeconds;
             this.player.group.position.y += this.player.verticalVelocity * deltaSeconds;
@@ -387,6 +521,7 @@ export class ThreeWorld {
             }
         }
 
+        // set animation based on speed / in-air
         const horizontalSpeedSq = this.player.velocity.lengthSq();
         let desiredAction = 'idle';
         if (!this.player.onGround) {
@@ -396,70 +531,233 @@ export class ThreeWorld {
         }
         this._setPlayerAction(desiredAction);
 
+        // If player is in queue, snap to queue position (but still follow cycle)
+        if (this.gameState.playerInQueue && this.player.queueIndex !== null) {
+            const desired = this._getQueuePosition(this.player.queueIndex);
+            // smoothly follow queue position (so player moves with NPCs)
+            this.player.group.position.lerp(desired, 1 - Math.exp(-8 * deltaSeconds));
+        }
+
+        // Update sprite if any
         this._updateSpritePosition(this.player);
     }
 
+    // -------------------------
+    // NPC updates
+    // -------------------------
     _updateNpcs(deltaSeconds) {
         this.npcs.forEach((npc) => {
             npc.mixer?.update(deltaSeconds * 0.5);
+
+            // distraction / alert logic (staggered per npc)
+            npc.distractionTimer = (npc.distractionTimer ?? 0) + deltaSeconds;
+            const totalCycle = 16; // full cycle
+            const distractedWindow = 6; // seconds distracted
+            const pos = npc.distractionTimer % totalCycle;
+
+            if (pos < distractedWindow) {
+                // distracted
+                if (npc.stateKey !== 'angry') {
+                    npc.stateKey = 'distracted';
+                    this._applySpriteTexture(npc.sprite, 'distracted');
+                }
+            } else {
+                // alert
+                if (npc.stateKey !== 'angry' && npc.stateKey !== 'alert') {
+                    npc.stateKey = 'alert';
+                    this._applySpriteTexture(npc.sprite, 'alert');
+                }
+            }
+
+            // handle queue movement lerp
+            if (npc.queueMove?.active) {
+                npc.queueMove.elapsed += deltaSeconds;
+                const t = Math.min(npc.queueMove.elapsed / npc.queueMove.duration, 1);
+                npc.group.position.lerpVectors(npc.queueMove.start, npc.queueMove.target, t);
+                if (t >= 1) {
+                    npc.queueMove.active = false;
+                    npc.group.position.copy(npc.queueMove.target);
+                }
+            }
 
             this._updateSpritePosition(npc, 1.1);
         });
     }
 
-    _updateCamera(deltaSeconds) {
-        if (!this.player.group) {
-            return;
+    // -------------------------
+    // Queue: advance / idle cycle
+    // -------------------------
+    _updateQueue(deltaSeconds) {
+        if (!this.npcs.length) return;
+
+        // Advance timers
+        this.queueConfig.timer += deltaSeconds;
+        this.queueCycle.timer += deltaSeconds;
+        this.gameState.gapChangeTimer += deltaSeconds;
+
+        // update gap periodically
+        if (this.gameState.gapChangeTimer >= this.gameState.gapChangeInterval) {
+            this.gameState.gapChangeTimer = 0;
+            this._createRandomQueueGap();
         }
 
-        const cameraOffset = this._getCameraOffset();
-        const desiredPosition = this.player.group.position.clone().add(cameraOffset);
-        this.camera.position.lerp(desiredPosition, 1 - Math.exp(-4 * deltaSeconds));
+        // initialize gap if none
+        if (this.gameState.queueGapIndex === null && this.npcs.length > 2) {
+            this._createRandomQueueGap();
+        }
 
-        this.cameraTarget.copy(this.player.group.position);
-        this.cameraTarget.y += 1.6;
-        this.camera.lookAt(this.cameraTarget);
-    }
+        // decide whether the queue is walking or idle based on cycle
+        const cycle = this.queueCycle;
+        const cyclePos = cycle.timer % cycle.cycleDuration;
+        const isWalking = cyclePos < cycle.walkTime;
 
-    _createStateSprite(stateKey = DEFAULT_NPC_STATE, scale = 0.5) {
-        const material = new THREE.SpriteMaterial({
-            map: this.textureLoader.load(NPC_STATE_ICONS[stateKey] ?? NPC_STATE_ICONS.unknown),
-            transparent: true
-        });
-        const sprite = new THREE.Sprite(material);
-        sprite.scale.set(scale, scale, 1);
-        return sprite;
-    }
-
-    _applySpriteTexture(sprite, stateKey) {
-        const path = NPC_STATE_ICONS[stateKey] ?? NPC_STATE_ICONS.unknown;
-        this.textureLoader.load(path, (texture) => {
-            const oldMaterial = sprite.material;
-            sprite.material = new THREE.SpriteMaterial({
-                map: texture,
-                transparent: true
+        // move NPCs when walking
+        if (isWalking) {
+            this.npcs.forEach((npc, index) => {
+                const target = this._getQueuePosition(index);
+                // if NPC is not currently in a move animation, nudge it toward target
+                if (!npc.queueMove.active) {
+                    npc.group.position.lerp(target, 0.05);
+                    // play walk animation if present
+                    if (npc.actions?.walk) {
+                        npc.actions.walk.paused = false;
+                        npc.actions.walk.play && npc.actions.walk.play();
+                    }
+                    if (npc.actions?.idle && npc.actions.idle.play) {
+                        npc.actions.idle.paused = true;
+                        npc.actions.idle.stop && npc.actions.idle.stop();
+                    }
+                }
+                // ensure queueIndex consistent
+                npc.queueIndex = index;
             });
+        } else {
+            // idle: freeze positions and switch to idle anim if any
+            this.npcs.forEach((npc) => {
+                if (npc.actions?.idle) {
+                    npc.actions.idle.paused = false;
+                    npc.actions.idle.play && npc.actions.idle.play();
+                }
+                if (npc.actions?.walk) {
+                    npc.actions.walk.paused = true;
+                    npc.actions.walk.stop && npc.actions.walk.stop();
+                }
+            });
+        }
 
-            if (oldMaterial) {
-                oldMaterial.map?.dispose();
-                oldMaterial.dispose();
+        // reset cycle timer if needed
+        if (this.queueCycle.timer >= this.queueCycle.cycleDuration) {
+            this.queueCycle.timer = 0;
+        }
+    }
+
+    _advanceQueue() {
+        if (this.npcs.length <= 1) return;
+
+        const removed = this.npcs.shift();
+        // removed stays at front (could be removed from scene as desired)
+
+        // reassign queue indexes and set move targets
+        this.npcs.forEach((npc, index) => {
+            npc.queueIndex = index;
+            npc.queueMove.start.copy(npc.group.position);
+            npc.queueMove.target.copy(this._getQueuePosition(index));
+            npc.queueMove.elapsed = 0;
+            npc.queueMove.duration = this.queueConfig.moveDuration;
+            npc.queueMove.active = true;
+        });
+    }
+
+    _createRandomQueueGap() {
+        if (this.npcs.length <= 2) {
+            this.gameState.queueGapIndex = null;
+            return;
+        }
+        const minGapIndex = 1;
+        const maxGapIndex = Math.min(this.npcs.length - 1, 4);
+        this.gameState.queueGapIndex = Math.floor(Math.random() * (maxGapIndex - minGapIndex + 1)) + minGapIndex;
+    }
+
+    _updateQueueCutting(deltaSeconds) {
+        // NPCs do not cut the queue. This update step monitors whether the
+        // player is near a gap and could be seen by alert NPCs; if so, mark
+        // the player as caught. Insertion itself is triggered by the UI.
+        if (!this.player.group) return;
+
+        if (this.gameState.playerInQueue || this.gameState.queueGapIndex === null) return;
+
+        if (this._isNearQueueGap()) {
+            if (this._isCaughtByAlertNpc()) {
+                this._playerCaught();
+            }
+        }
+    }
+
+    // -------------------------
+    // Queue cutting / insertion helpers
+    // -------------------------
+    _isNearQueueGap() {
+        if (this.gameState.queueGapIndex === null || !this.player.group) return false;
+        const gapPos = this._getQueuePosition(this.gameState.queueGapIndex);
+        const playerPos = this.player.group.position;
+        const distance = gapPos.distanceTo(playerPos);
+        return distance < this.gameState.detectionRange;
+    }
+
+    _canPlayerInsert() {
+        // All NPCs must be distracted (not alert/angry)
+        return this.npcs.every(npc => npc.stateKey === 'distracted');
+    }
+
+    _playerCaught() {
+        this.gameState.playerCaught = true;
+        // make all NPCs angry
+        setAllNpcsAngry(this.npcs);
+        this.npcs.forEach((npc) => {
+            npc.stateKey = 'angry';
+            this._applySpriteTexture(npc.sprite, 'angry');
+        });
+    }
+
+    _insertPlayerAtQueueIndex(index) {
+        // Reindex NPCs to make room for player
+        this.npcs.forEach((npc) => {
+            if (npc.queueIndex >= index) {
+                npc.queueIndex += 1;
+                npc.queueMove.start.copy(npc.group.position);
+                npc.queueMove.target.copy(this._getQueuePosition(npc.queueIndex));
+                npc.queueMove.elapsed = 0;
+                npc.queueMove.duration = this.queueConfig.moveDuration;
+                npc.queueMove.active = true;
             }
         });
+
+        this.player.queueIndex = index;
+        const gapPos = this._getQueuePosition(index);
+        this.player.group.position.copy(gapPos);
+        this.gameState.playerInQueue = true;
+
+        // remove the gap after insertion
+        this.gameState.queueGapIndex = null;
     }
 
-    _updateSpritePosition(character, offset = 1.2) {
-        if (!character?.headBone || !character.sprite) {
-            return;
-        }
-        character.headBone.getWorldPosition(this.tempVector);
-        this.tempVector.y += offset;
-        character.sprite.position.copy(this.tempVector);
+    _isCaughtByAlertNpc() {
+        if (!this.player.group) return false;
+        const playerPos = this.player.group.position;
+        return this.npcs.some((npc) => {
+            if (npc.stateKey === 'alert') {
+                const distToPlayer = npc.group.position.distanceTo(playerPos);
+                return distToPlayer < 4;
+            }
+            return false;
+        });
     }
 
+    // -------------------------
+    // Actions & animations helpers
+    // -------------------------
     _buildPlayerActions(animations = []) {
-        if (!this.player.mixer) {
-            return {};
-        }
+        if (!this.player.mixer) return {};
 
         const actionMap = {
             idle: ['Idle', 'CharacterArmature|Idle', 'idle'],
@@ -471,9 +769,7 @@ export class ThreeWorld {
         const actions = {};
         Object.entries(actionMap).forEach(([key, candidates]) => {
             const clip = this._findClipByNames(animations, candidates);
-            if (!clip) {
-                return;
-            }
+            if (!clip) return;
             const action = this.player.mixer.clipAction(clip);
             if (key === 'jump') {
                 action.setLoop(THREE.LoopOnce, 0);
@@ -482,32 +778,20 @@ export class ThreeWorld {
             actions[key] = action;
         });
 
-        if (!actions.walk) {
-            const fallbackClip = animations[0];
-            if (fallbackClip) {
-                actions.walk = this.player.mixer.clipAction(fallbackClip);
-            }
-        }
+        // fallback
+        if (!actions.walk && animations[0]) actions.walk = this.player.mixer.clipAction(animations[0]);
+        if (!actions.idle && actions.walk) actions.idle = actions.walk;
+        if (!actions.run && actions.walk) actions.run = actions.walk;
+        if (!actions.jump && actions.run) actions.jump = actions.run;
 
-        if (!actions.idle && actions.walk) {
-            actions.idle = actions.walk;
-        }
-
-        if (!actions.run && actions.walk) {
-            actions.run = actions.walk;
-        }
-
-        if (!actions.jump && actions.run) {
-            actions.jump = actions.run;
-        }
-
+        // pause all initially
+        Object.values(actions).forEach(a => a && (a.paused = false) && a.play && a.play());
+        // then immediately fade to idle
         return actions;
     }
 
     _setPlayerAction(name) {
-        if (!this.player.mixer) {
-            return;
-        }
+        if (!this.player.mixer) return;
 
         const nextAction =
             this.player.actions[name] ??
@@ -515,9 +799,7 @@ export class ThreeWorld {
             this.player.actions.idle ??
             null;
 
-        if (!nextAction || this.player.activeAction === nextAction) {
-            return;
-        }
+        if (!nextAction || this.player.activeAction === nextAction) return;
 
         nextAction.reset().fadeIn(0.15).play();
         if (this.player.activeAction && this.player.activeAction !== nextAction) {
@@ -530,16 +812,12 @@ export class ThreeWorld {
         for (const name of names) {
             const lowered = name.toLowerCase();
             let clip = THREE.AnimationClip.findByName(animations, name);
-            if (clip) {
-                return clip;
-            }
+            if (clip) return clip;
             clip = animations.find((candidate) => {
                 const candidateName = candidate.name?.toLowerCase() ?? '';
                 return candidateName === lowered || candidateName.includes(lowered);
             });
-            if (clip) {
-                return clip;
-            }
+            if (clip) return clip;
         }
         return animations.length ? animations[0] : null;
     }
@@ -562,5 +840,56 @@ export class ThreeWorld {
             null
         );
     }
-}
 
+    // -------------------------
+    // Sprites helpers
+    // -------------------------
+    _createStateSprite(stateKey = DEFAULT_NPC_STATE, scale = 0.5) {
+        const material = new THREE.SpriteMaterial({
+            map: this.textureLoader.load(NPC_STATE_ICONS[stateKey] ?? NPC_STATE_ICONS.unknown),
+            transparent: true
+        });
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(scale, scale, 1);
+        return sprite;
+    }
+
+    _applySpriteTexture(sprite, stateKey) {
+        if (!sprite) return;
+        const path = NPC_STATE_ICONS[stateKey] ?? NPC_STATE_ICONS.unknown;
+        this.textureLoader.load(path, (texture) => {
+            const oldMaterial = sprite.material;
+            sprite.material = new THREE.SpriteMaterial({
+                map: texture,
+                transparent: true
+            });
+            if (oldMaterial) {
+                oldMaterial.map?.dispose();
+                oldMaterial.dispose();
+            }
+        });
+    }
+
+    _updateSpritePosition(character, offset = 1.2) {
+        if (!character?.headBone || !character.sprite) return;
+        character.headBone.getWorldPosition(this.tempVector);
+        this.tempVector.y += offset;
+        character.sprite.position.copy(this.tempVector);
+    }
+
+    // -------------------------
+    // Camera update
+    // -------------------------
+    _updateCamera(deltaSeconds) {
+        if (!this.player.group) return;
+
+        const cameraOffset = this._getCameraOffset();
+        const desiredPosition = this.player.group.position.clone().add(cameraOffset);
+        // smooth lerp
+        this.camera.position.lerp(desiredPosition, 1 - Math.exp(-6 * deltaSeconds));
+
+        this.cameraTarget.copy(this.player.group.position);
+        this.cameraTarget.y += 1.6;
+        this.camera.lookAt(this.cameraTarget);
+    }
+}
