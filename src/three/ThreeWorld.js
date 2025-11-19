@@ -5,6 +5,7 @@ import { DEFAULT_NPC_STATE, NPC_STATE_ICONS, getRandomNpcState } from './npcStat
 const ENVIRONMENT_MODEL = '/models/world.glb';
 const PLAYER_MODEL = '/models/man1.glb';
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const CHARACTER_TARGET_HEIGHT = 1.8;
 
 const NPC_POOL = [
     '/models/man2.glb',
@@ -31,8 +32,8 @@ export class ThreeWorld {
         this.scene.background = new THREE.Color(0x0d1117);
 
         this.cameraTarget = new THREE.Vector3();
-        this.cameraRadius = 8;
-        this.cameraHeight = 3;
+        this.cameraRadius = 4.5;
+        this.cameraHeight = 2.4;
         this.cameraYaw = 0;
         this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 400);
         this.camera.position.copy(this._getCameraOffset());
@@ -192,18 +193,17 @@ export class ThreeWorld {
         this.loader.load(
             PLAYER_MODEL,
             (gltf) => {
+                const model = gltf.scene;
+                this._prepareCharacterModel(model);
+
                 const group = new THREE.Group();
-                group.add(gltf.scene);
+                group.add(model);
                 group.position.set(0, 0, 0);
                 this.scene.add(group);
 
-                const headBone = this._findHeadBone(gltf.scene);
-                const sprite = this._createStateSprite(DEFAULT_NPC_STATE, 0.6);
-                this.scene.add(sprite);
-
                 this.player.group = group;
-                this.player.headBone = headBone;
-                this.player.sprite = sprite;
+                this.player.headBone = this._findHeadBone(gltf.scene);
+                this.player.sprite = null;
 
                 if (gltf.animations?.length) {
                     this.player.mixer = new THREE.AnimationMixer(gltf.scene);
@@ -241,6 +241,34 @@ export class ThreeWorld {
         this.environmentRadius = size.length() / 2;
     }
 
+    _prepareCharacterModel(root, targetHeight = CHARACTER_TARGET_HEIGHT) {
+        if (!root) {
+            return;
+        }
+
+        const bounds = new THREE.Box3().setFromObject(root);
+        if (bounds.isEmpty()) {
+            return;
+        }
+
+        const size = new THREE.Vector3();
+        bounds.getSize(size);
+        if (size.y <= 0.0001) {
+            return;
+        }
+
+        const uniformScale = targetHeight / size.y;
+        root.scale.setScalar(uniformScale);
+        root.updateMatrixWorld(true);
+
+        const scaledBounds = new THREE.Box3().setFromObject(root);
+        if (!scaledBounds.isEmpty()) {
+            const offsetY = scaledBounds.min.y;
+            root.position.y -= offsetY;
+            root.updateMatrixWorld(true);
+        }
+    }
+
     _getCameraOffset() {
         return new THREE.Vector3(
             Math.sin(this.cameraYaw) * this.cameraRadius,
@@ -261,8 +289,11 @@ export class ThreeWorld {
         this.loader.load(
             modelPath,
             (gltf) => {
+                const model = gltf.scene;
+                this._prepareCharacterModel(model);
+
                 const npcGroup = new THREE.Group();
-                npcGroup.add(gltf.scene);
+                npcGroup.add(model);
                 npcGroup.position.copy(position);
                 this.scene.add(npcGroup);
 
@@ -365,22 +396,14 @@ export class ThreeWorld {
         }
         this._setPlayerAction(desiredAction);
 
-        if (this.player.headBone && this.player.sprite) {
-            this.player.headBone.getWorldPosition(this.tempVector);
-            this.tempVector.y += 1.2;
-            this.player.sprite.position.copy(this.tempVector);
-        }
+        this._updateSpritePosition(this.player);
     }
 
     _updateNpcs(deltaSeconds) {
         this.npcs.forEach((npc) => {
             npc.mixer?.update(deltaSeconds * 0.5);
 
-            if (npc.headBone && npc.sprite) {
-                npc.headBone.getWorldPosition(this.tempVector);
-                this.tempVector.y += 1.1;
-                npc.sprite.position.copy(this.tempVector);
-            }
+            this._updateSpritePosition(npc, 1.1);
         });
     }
 
@@ -422,6 +445,15 @@ export class ThreeWorld {
                 oldMaterial.dispose();
             }
         });
+    }
+
+    _updateSpritePosition(character, offset = 1.2) {
+        if (!character?.headBone || !character.sprite) {
+            return;
+        }
+        character.headBone.getWorldPosition(this.tempVector);
+        this.tempVector.y += offset;
+        character.sprite.position.copy(this.tempVector);
     }
 
     _buildPlayerActions(animations = []) {
