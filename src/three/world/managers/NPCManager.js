@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DEFAULT_NPC_STATE, NPC_STATE_ICONS, getRandomNpcState, setAllNpcsAngry, setAllNpcsDistracted } from './npcStates.js';
+import { DEFAULT_NPC_STATE, NPC_STATE_ICONS, getRandomNpcState, setAllNpcsAngry, setAllNpcsDistracted } from '../npcStates.js';
 
 const NPC_POOL = [
     '/models/man2.glb',

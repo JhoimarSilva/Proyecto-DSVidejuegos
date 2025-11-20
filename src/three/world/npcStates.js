@@ -40,4 +40,3 @@ export function setAllNpcsDistracted(npcs) {
         npc.distractionTimer = 0;
     });
 }
-

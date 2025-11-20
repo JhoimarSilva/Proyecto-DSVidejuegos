@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { NPCManager } from './NPCManager.js';
-import { PlayerManager } from './PlayerManager.js';
-import { SoundManager } from './SoundManager.js';
-import { QueueManager } from './QueueManager.js';
+import { NPCManager } from './managers/NPCManager.js';
+import { PlayerManager } from './managers/PlayerManager.js';
+import { SoundManager } from './managers/SoundManager.js';
+import { QueueManager } from './managers/QueueManager.js';
 import { WorldManager } from './WorldManager.js';
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
