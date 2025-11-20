@@ -29,14 +29,35 @@ export default class MainScene extends Phaser.Scene {
         this._createHud();
         this._createControls();
         this._registerEvents();
-        this.input.mouse.requestPointerLock();
+
+        // Browsers block `requestPointerLock()` and suspend the AudioContext until a user-initiated event.
         this.ambiente = this.sound.add('alerta', {
-        volume: 0.3,
-        loop: true
+            volume: 0.3,
+            loop: true
         });
-        this.ambiente.play();
 
         this.sonandoAbucheo = false;
+
+        this.input.once('pointerdown', async () => {
+            try {
+                // Pointer lock
+                this.input.mouse.requestPointerLock();
+            } catch (err) {
+                console.warn('Pointer lock request failed:', err);
+            }
+
+            // Resume the audio context (required in many browsers) and start ambience.
+            try {
+                if (this.sound && this.sound.context && this.sound.context.state === 'suspended') {
+                    await this.sound.context.resume();
+                }
+                if (this.ambiente && !this.ambiente.isPlaying) {
+                    this.ambiente.play();
+                }
+            } catch (audioErr) {
+                console.warn('AudioContext resume/play failed:', audioErr);
+            }
+        });
             
     }
 
