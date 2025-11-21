@@ -86,8 +86,20 @@ export class ThreeWorld {
         this.queueManager.updateQueue(deltaSeconds);
         this.queueManager.updateQueueCutting(deltaSeconds, this.playerManager.getPosition());
 
-        // Update player queue movement if active
+        // Update player queue movement if active (insertion/exit)
         this._updatePlayerQueueMovement(deltaSeconds);
+
+        // Continuous movement with queue
+        if (this.npcManager.gameState.playerInQueue && this.queueManager.isWalking()) {
+            const player = this.playerManager.player;
+            // Only move if not currently doing a special queue move (insert/exit)
+            if (player.group && (!player.queueMove || !player.queueMove.active)) {
+                const queueDirection = this.queueManager.queueConfig.direction;
+                const speed = 1.0; // Match NPC speed
+                const movement = queueDirection.clone().multiplyScalar(speed * deltaSeconds);
+                player.group.position.add(movement);
+            }
+        }
 
         // If player is in queue, sync animation to queue state
         if (this.npcManager.gameState.playerInQueue) {
@@ -133,7 +145,7 @@ export class ThreeWorld {
             npcsAngry: this.npcManager.npcs.some((npc) => npc.stateKey === 'angry'),
             nearQueueGap: this.queueManager.isNearQueueGap(this.playerManager.getPosition()),
             queueGapIndex: this.npcManager.gameState.queueGapIndex,
-            queueGapPosition: this.npcManager.gameState.queueGapIndex !== null ? 
+            queueGapPosition: this.npcManager.gameState.queueGapIndex !== null ?
                 this.queueManager.getQueuePosition(this.npcManager.gameState.queueGapIndex) : null
         };
     }
