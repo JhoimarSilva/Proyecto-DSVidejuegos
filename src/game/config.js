@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
-import MainScene from './scenes/MainScene.js';
+import MainMenuView from '../views/MainMenuView.js';
+import CharacterSelectView from '../views/CharacterSelectView.js';
+import UsernameInputView from '../views/UsernameInputView.js';
+import MainGameView from '../views/MainGameView.js';
 
 export function createGameConfig() {
     const width = window.innerWidth;
@@ -11,7 +14,7 @@ export function createGameConfig() {
         width,
         height,
         backgroundColor: '#1b1f23',
-        scene: [MainScene],
+        scene: [MainMenuView, CharacterSelectView, UsernameInputView, MainGameView],
         scale: {
             mode: Phaser.Scale.RESIZE,
             autoCenter: Phaser.Scale.CENTER_BOTH

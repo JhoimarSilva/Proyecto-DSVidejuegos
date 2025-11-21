@@ -1,9 +1,13 @@
 import Phaser from 'phaser';
-import { ThreeWorld } from '../../three/ThreeWorld.js';
+import { ThreeWorld } from '../three/world/ThreeWorld.js';
+import { gameContext } from '../contexts/GameContext.js';
 
-export default class MainScene extends Phaser.Scene {
+/**
+ * MainGameView - Escena del juego principal donde el jugador explora y se cuela en la fila
+ */
+export default class MainGameView extends Phaser.Scene {
     constructor() {
-        super('MainScene');
+        super('MainGameView');
         this.threeWorld = null;
         this.cursors = null;
         this.wasd = null;
@@ -13,13 +17,14 @@ export default class MainScene extends Phaser.Scene {
         this.pointerHandlers = null;
         this.queueGapButton = null;
         this.eKey = null;
+        this.ambiente = null;
+        this.sonandoAbucheo = false;
     }
 
     preload() {
-    this.load.audio('alerta', '/sounds/ambiente.wav');
-    this.load.audio('descubierto', '/sounds/abucheos.wav');
+        this.load.audio('alerta', '/sounds/ambiente.wav');
+        this.load.audio('descubierto', '/sounds/abucheos.wav');
     }
-
 
     create() {
         this._configurePhaserCanvas();
@@ -30,7 +35,7 @@ export default class MainScene extends Phaser.Scene {
         this._createControls();
         this._registerEvents();
 
-        // Browsers block `requestPointerLock()` and suspend the AudioContext until a user-initiated event.
+        // Crear sonido ambiente (se reproducirá cuando el jugador haga clic)
         this.ambiente = this.sound.add('alerta', {
             volume: 0.3,
             loop: true
@@ -38,15 +43,19 @@ export default class MainScene extends Phaser.Scene {
 
         this.sonandoAbucheo = false;
 
+        // Solicitar pointer lock y reanudar audio solo tras gesto del usuario
         this.input.once('pointerdown', async () => {
             try {
-                // Pointer lock
-                this.input.mouse.requestPointerLock();
+                // Request pointer lock
+                const maybePromise = this.input.mouse.requestPointerLock();
+                if (maybePromise && typeof maybePromise.then === 'function') {
+                    maybePromise.catch((err) => console.warn('Pointer lock request failed (promise):', err));
+                }
             } catch (err) {
-                console.warn('Pointer lock request failed:', err);
+                console.warn('Pointer lock request failed (sync):', err);
             }
 
-            // Resume the audio context (required in many browsers) and start ambience.
+            // Reanudar AudioContext y reproducir sonido ambiente
             try {
                 if (this.sound && this.sound.context && this.sound.context.state === 'suspended') {
                     await this.sound.context.resume();
@@ -58,9 +67,7 @@ export default class MainScene extends Phaser.Scene {
                 console.warn('AudioContext resume/play failed:', audioErr);
             }
         });
-            
     }
-
 
     update(_, delta) {
         this._updatePlayerInput();
@@ -69,19 +76,18 @@ export default class MainScene extends Phaser.Scene {
     }
 
     detectarJugador() {
+        if (this.sonandoAbucheo) return;
+        this.sonandoAbucheo = true;
 
-    if (this.sonandoAbucheo) return;
-    this.sonandoAbucheo = true;
+        this.sound.play('descubierto', {
+            volume: 1
+        });
 
-    this.sound.play('descubierto', {
-        volume: 1
-    });
+        console.log("¡Jugador detectado!");
 
-    console.log("¡Jugador detectado!");
-
-    this.time.delayedCall(1500, () => {
-        this.sonandoAbucheo = false;
-    });
+        this.time.delayedCall(1500, () => {
+            this.sonandoAbucheo = false;
+        });
     }
 
     _createHud() {
@@ -91,8 +97,12 @@ export default class MainScene extends Phaser.Scene {
             color: '#ffffff'
         };
 
+        // Mostrar nombre del jugador
+        const playerName = gameContext.getPlayerName();
+        const hudText = playerName ? `Jugador: ${playerName}` : 'Explora la escuela';
+
         this.add
-            .text(16, 16, 'Explora la escuela', style)
+            .text(16, 16, hudText, style)
             .setDepth(10)
             .setScrollFactor(0);
 
@@ -132,7 +142,7 @@ export default class MainScene extends Phaser.Scene {
             .setDepth(10)
             .setScrollFactor(0);
 
-        // Create queue gap button (initially hidden)
+        // Botón para colarse en la fila
         this.queueGapButton = this.add
             .rectangle(window.innerWidth / 2, window.innerHeight - 80, 200, 50, 0x00aa00)
             .setDepth(100)
@@ -160,6 +170,22 @@ export default class MainScene extends Phaser.Scene {
     }
 
     _createControls() {
+        // Request pointer lock directly on canvas on first click
+        const canvas = this.game.canvas;
+        if (canvas && !this._pointerLockRequested) {
+            this._pointerLockRequested = false;
+            canvas.addEventListener('click', () => {
+                if (!this._pointerLockRequested) {
+                    this._pointerLockRequested = true;
+                    if (canvas.requestPointerLock) {
+                        canvas.requestPointerLock().catch((err) => {
+                            console.warn('Canvas requestPointerLock failed:', err);
+                        });
+                    }
+                }
+            }, { once: true });
+        }
+
         this.cursors = this.input.keyboard.createCursorKeys();
         this.wasd = this.input.keyboard.addKeys({
             up: Phaser.Input.Keyboard.KeyCodes.W,
@@ -182,7 +208,6 @@ export default class MainScene extends Phaser.Scene {
         const forward =
             Number(this.cursors.up.isDown || this.wasd.up.isDown) -
             Number(this.cursors.down.isDown || this.wasd.down.isDown);
-        // Swap left/right so controls feel natural (A = left negative, D = right positive)
         const strafe =
             Number(this.cursors.left.isDown || this.wasd.left.isDown) -
             Number(this.cursors.right.isDown || this.wasd.right.isDown);
@@ -200,13 +225,11 @@ export default class MainScene extends Phaser.Scene {
 
         const gameState = this.threeWorld.getGameState();
 
-        // Show button when near queue gap OR when player is already in queue (to allow exit)
         const shouldShow = (gameState.nearQueueGap || gameState.playerInQueue) && !gameState.playerCaught;
         this.queueGapButton.setVisible(shouldShow);
 
         const buttonText = this.children.getByName('queueGapButtonText');
         if (buttonText) {
-            // Update text depending on context
             if (gameState.playerInQueue) {
                 buttonText.setText('Presiona E para salir de la fila');
             } else {
@@ -215,7 +238,7 @@ export default class MainScene extends Phaser.Scene {
             buttonText.setVisible(shouldShow);
         }
 
-        // Handle E key press
+        // Manejar la tecla E
         if (shouldShow && this.eKey && Phaser.Input.Keyboard.JustDown(this.eKey)) {
             if (gameState.playerInQueue) {
                 this.threeWorld.exitPlayerFromQueue();
@@ -296,7 +319,7 @@ export default class MainScene extends Phaser.Scene {
                     return;
                 }
 
-                // Modo normal (sin pointer lock)
+                // Normal mode (sin pointer lock)
                 if (this.lastPointerX == null) {
                     this.lastPointerX = pointer.x;
                     return;
@@ -309,7 +332,6 @@ export default class MainScene extends Phaser.Scene {
                     this.threeWorld?.rotateCamera(deltaX);
                 }
             }
-
         };
 
         this.input.on('pointerover', this.pointerHandlers.over);
@@ -329,4 +351,3 @@ export default class MainScene extends Phaser.Scene {
         this.lastPointerX = null;
     }
 }
-
