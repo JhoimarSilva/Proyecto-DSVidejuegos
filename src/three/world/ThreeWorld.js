@@ -35,7 +35,7 @@ export class ThreeWorld {
             width: '100%',
             height: '100%',
             pointerEvents: 'none',
-            zIndex: '2'
+            zIndex: '0'
         });
         this.parentElement.appendChild(this.domElement);
 
@@ -146,7 +146,8 @@ export class ThreeWorld {
             nearQueueGap: this.queueManager.isNearQueueGap(this.playerManager.getPosition()),
             queueGapIndex: this.npcManager.gameState.queueGapIndex,
             queueGapPosition: this.npcManager.gameState.queueGapIndex !== null ?
-                this.queueManager.getQueuePosition(this.npcManager.gameState.queueGapIndex) : null
+                this.queueManager.getQueuePosition(this.npcManager.gameState.queueGapIndex) : null,
+            canInsert: this.npcManager.canPlayerInsert()
         };
     }
 

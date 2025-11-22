@@ -14,6 +14,7 @@ export function createGameConfig() {
         width,
         height,
         backgroundColor: '#1b1f23',
+        transparent: true,
         scene: [MainMenuView, CharacterSelectView, UsernameInputView, MainGameView],
         scale: {
             mode: Phaser.Scale.RESIZE,
