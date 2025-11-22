@@ -85,8 +85,78 @@ export default class MainScene extends Phaser.Scene {
     }
 
     _createHud() {
-        // HUD elements are now controlled in MainGameView.js
-        // This method is kept for compatibility but does not create any UI elements
+        const style = {
+            fontFamily: 'monospace',
+            fontSize: '18px',
+            color: '#ffffff'
+        };
+
+        this.add
+            .text(16, 48, 'Mover: WASD / Flechas', {
+                ...style,
+                fontSize: '16px',
+                color: '#00000088'
+            })
+            .setDepth(10)
+            .setScrollFactor(0);
+
+        this.add
+            .text(16, 70, 'Shift: Correr | Space: Saltar', {
+                ...style,
+                fontSize: '16px',
+                color: '#00000088'
+            })
+            .setDepth(10)
+            .setScrollFactor(0);
+
+        this.add
+            .text(16, 92, 'Mueve el mouse para rotar la cámara', {
+                ...style,
+                fontSize: '16px',
+                color: '#00000088'
+            })
+            .setDepth(10)
+            .setScrollFactor(0);
+
+        this.add
+            .text(16, 114, 'E: ingresar a la fila', {
+                ...style,
+                fontSize: '16px',
+                color: '#00000088'
+            })
+            .setDepth(10)
+            .setScrollFactor(0);
+
+
+        // Create queue gap button (initially hidden)
+        this.queueGapButton = this.add
+            .rectangle(window.innerWidth / 2, window.innerHeight - 80, 300, 60, 0x00aa00)
+            .setDepth(100)
+            .setScrollFactor(0)
+            .setInteractive()
+            .on('pointerdown', () => this._tryInsertInQueue())
+            .setVisible(false)
+            .setAlpha(0.9);
+
+        this.queueGapButtonText = this.add
+            .text(
+                window.innerWidth / 2,
+                window.innerHeight - 80,
+                'Presiona E para colarte',
+                {
+                    fontFamily: 'monospace',
+                    fontSize: '18px',
+                    color: '#ffffff',
+                    fontStyle: 'bold',
+                    backgroundColor: '#00000066',
+                    padding: { x: 15, y: 8 }
+                }
+            )
+            .setOrigin(0.5)
+            .setDepth(101)
+            .setScrollFactor(0)
+            .setVisible(false)
+            .setName('queueGapButtonText');
     }
 
     _createControls() {
