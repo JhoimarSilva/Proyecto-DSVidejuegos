@@ -34,12 +34,23 @@ export class QueueManager {
         const cyclePos = cycle.timer % cycle.cycleDuration;
         const isWalking = cyclePos < cycle.walkTime;
 
-        // move NPCs when walking
+        // move NPCs when walking - they advance in the queue direction
         if (isWalking) {
+            // Get the queue direction (direction the queue is facing)
+            const queueDirection = this.queueConfig.direction.clone();
+
             this.npcManager.npcs.forEach((npc, index) => {
-                const target = this.npcManager._getQueuePosition(index);
                 if (!npc.queueMove.active) {
-                    npc.group.position.lerp(target, 0.05);
+                    // Move NPC forward in queue direction with physics
+                    const speed = npc.walkSpeed || 1;
+                    const movement = queueDirection.clone().multiplyScalar(speed * deltaSeconds);
+                    npc.group.position.add(movement);
+
+                    // Update rotation to face queue direction
+                    const targetAngle = Math.atan2(queueDirection.x, queueDirection.z);
+                    npc.group.rotation.y = targetAngle;
+
+                    // Play walk animation
                     if (npc.actions?.walk) {
                         npc.actions.walk.paused = false;
                         npc.actions.walk.play && npc.actions.walk.play();
@@ -80,22 +91,47 @@ export class QueueManager {
     updateQueueCutting(deltaSeconds, playerPos) {
         if (this.gameState.playerInQueue || this.gameState.queueGapIndex === null) return;
 
-        if (this._isNearQueueGap(playerPos)) {
+        if (this.isNearQueue(playerPos)) {
             if (this.npcManager.isCaughtByAlertNpc(playerPos)) {
                 this.npcManager.playerCaught(this.soundManager);
             }
         }
     }
 
-    _isNearQueueGap(playerPos) {
-        if (this.gameState.queueGapIndex === null) return false;
-        const gapPos = this.npcManager._getQueuePosition(this.gameState.queueGapIndex);
-        const distance = gapPos.distanceTo(playerPos);
-        return distance < this.gameState.detectionRange;
+    getNearestQueueIndex(playerPos) {
+        if (!this.npcManager.npcs.length) return 0;
+
+        let closestIndex = 0;
+        let minDistance = Infinity;
+
+        // Check distance to actual NPC positions
+        this.npcManager.npcs.forEach((npc) => {
+            const dist = npc.group.position.distanceTo(playerPos);
+            if (dist < minDistance) {
+                minDistance = dist;
+                closestIndex = npc.queueIndex;
+            }
+        });
+
+        return closestIndex;
     }
 
+    isNearQueue(playerPos) {
+        if (!this.npcManager.npcs.length) return false;
+
+        // Check distance to the nearest NPC (actual position)
+        const nearestIndex = this.getNearestQueueIndex(playerPos);
+        const npc = this.npcManager.npcs.find(n => n.queueIndex === nearestIndex);
+
+        // If we found an NPC, use their position. If not (shouldn't happen if length > 0), fallback to static.
+        const pos = npc ? npc.group.position : this.npcManager._getQueuePosition(nearestIndex);
+
+        return pos.distanceTo(playerPos) < this.gameState.detectionRange;
+    }
+
+    // Deprecated but kept for compatibility if needed, or redirected
     isNearQueueGap(playerPos) {
-        return this._isNearQueueGap(playerPos);
+        return this.isNearQueue(playerPos);
     }
 
     _createRandomQueueGap() {
@@ -110,16 +146,19 @@ export class QueueManager {
 
     insertPlayerInQueue(playerGroup, queueIndex = null) {
         if (!playerGroup) return false;
-        if (this.gameState.queueGapIndex === null) return false;
-        if (!this._isNearQueueGap(playerGroup.position)) return false;
+
+        // If no specific index provided, find the nearest one
+        if (queueIndex === null) {
+            if (!this.isNearQueue(playerGroup.position)) return false;
+            queueIndex = this.getNearestQueueIndex(playerGroup.position);
+        }
 
         if (!this.npcManager.canPlayerInsert()) {
             this.npcManager.playerCaught(this.soundManager);
             return false;
         }
 
-        const insertIndex = this.gameState.queueGapIndex;
-        this._insertPlayerAtQueueIndex(playerGroup, insertIndex);
+        this._insertPlayerAtQueueIndex(playerGroup, queueIndex);
         return true;
     }
 
@@ -172,7 +211,7 @@ export class QueueManager {
         this.gameState.playerInQueue = true;
         console.log(`¡Jugador se incorporó a la fila en posición ${index}!`);
         this.gameState.queueGapIndex = null;
-        
+
         return true;
     }
 
@@ -193,7 +232,7 @@ export class QueueManager {
 
         playerGroup.position.copy(sidePos);
         playerGroup.queueIndex = null;
-        
+
         // Detener movimiento en la fila
         if (playerGroup.queueMove) {
             playerGroup.queueMove.active = false;

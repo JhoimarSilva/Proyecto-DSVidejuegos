@@ -97,20 +97,11 @@ export default class MainGameView extends Phaser.Scene {
             color: '#ffffff'
         };
 
-        // Mostrar nombre del jugador
-        const playerName = gameContext.getPlayerName();
-        const hudText = playerName ? `Jugador: ${playerName}` : 'Explora la escuela';
-
-        this.add
-            .text(16, 16, hudText, style)
-            .setDepth(10)
-            .setScrollFactor(0);
-
         this.add
             .text(16, 48, 'Mover: WASD / Flechas', {
                 ...style,
                 fontSize: '16px',
-                color: '#c9d1d9'
+                color: '#00000088'
             })
             .setDepth(10)
             .setScrollFactor(0);
@@ -119,7 +110,7 @@ export default class MainGameView extends Phaser.Scene {
             .text(16, 70, 'Shift: Correr | Space: Saltar', {
                 ...style,
                 fontSize: '16px',
-                color: '#c9d1d9'
+                color: '#00000088'
             })
             .setDepth(10)
             .setScrollFactor(0);
@@ -128,38 +119,43 @@ export default class MainGameView extends Phaser.Scene {
             .text(16, 92, 'Mueve el mouse para rotar la cámara', {
                 ...style,
                 fontSize: '16px',
-                color: '#c9d1d9'
+                color: '#00000088'
             })
             .setDepth(10)
             .setScrollFactor(0);
 
         this.add
-            .text(16, 114, 'Observa los estados de los NPC', {
+            .text(16, 114, 'E: ingresar a la fila', {
                 ...style,
                 fontSize: '16px',
-                color: '#c9d1d9'
+                color: '#00000088'
             })
             .setDepth(10)
             .setScrollFactor(0);
 
-        // Botón para colarse en la fila
+
+        // Create queue gap button (initially hidden)
         this.queueGapButton = this.add
-            .rectangle(window.innerWidth / 2, window.innerHeight - 80, 200, 50, 0x00aa00)
+            .rectangle(window.innerWidth / 2, window.innerHeight - 80, 300, 60, 0x00aa00)
             .setDepth(100)
             .setScrollFactor(0)
             .setInteractive()
             .on('pointerdown', () => this._tryInsertInQueue())
-            .setVisible(false);
+            .setVisible(false)
+            .setAlpha(0.9);
 
-        this.add
+        this.queueGapButtonText = this.add
             .text(
                 window.innerWidth / 2,
                 window.innerHeight - 80,
                 'Presiona E para colarte',
                 {
-                    ...style,
-                    fontSize: '14px',
-                    color: '#000000'
+                    fontFamily: 'monospace',
+                    fontSize: '18px',
+                    color: '#ffffff',
+                    fontStyle: 'bold',
+                    backgroundColor: '#00000066',
+                    padding: { x: 15, y: 8 }
                 }
             )
             .setOrigin(0.5)

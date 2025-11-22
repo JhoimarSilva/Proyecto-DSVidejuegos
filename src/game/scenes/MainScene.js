@@ -16,8 +16,8 @@ export default class MainScene extends Phaser.Scene {
     }
 
     preload() {
-    this.load.audio('alerta', '/sounds/ambiente.wav');
-    this.load.audio('descubierto', '/sounds/abucheos.wav');
+        this.load.audio('alerta', '/sounds/ambiente.wav');
+        this.load.audio('descubierto', '/sounds/abucheos.wav');
     }
 
 
@@ -58,7 +58,7 @@ export default class MainScene extends Phaser.Scene {
                 console.warn('AudioContext resume/play failed:', audioErr);
             }
         });
-            
+
     }
 
 
@@ -70,18 +70,18 @@ export default class MainScene extends Phaser.Scene {
 
     detectarJugador() {
 
-    if (this.sonandoAbucheo) return;
-    this.sonandoAbucheo = true;
+        if (this.sonandoAbucheo) return;
+        this.sonandoAbucheo = true;
 
-    this.sound.play('descubierto', {
-        volume: 1
-    });
+        this.sound.play('descubierto', {
+            volume: 1
+        });
 
-    console.log("¡Jugador detectado!");
+        console.log("¡Jugador detectado!");
 
-    this.time.delayedCall(1500, () => {
-        this.sonandoAbucheo = false;
-    });
+        this.time.delayedCall(1500, () => {
+            this.sonandoAbucheo = false;
+        });
     }
 
     _createHud() {
@@ -92,15 +92,10 @@ export default class MainScene extends Phaser.Scene {
         };
 
         this.add
-            .text(16, 16, 'Explora la escuela', style)
-            .setDepth(10)
-            .setScrollFactor(0);
-
-        this.add
             .text(16, 48, 'Mover: WASD / Flechas', {
                 ...style,
                 fontSize: '16px',
-                color: '#c9d1d9'
+                color: '#00000088'
             })
             .setDepth(10)
             .setScrollFactor(0);
@@ -109,7 +104,7 @@ export default class MainScene extends Phaser.Scene {
             .text(16, 70, 'Shift: Correr | Space: Saltar', {
                 ...style,
                 fontSize: '16px',
-                color: '#c9d1d9'
+                color: '#00000088'
             })
             .setDepth(10)
             .setScrollFactor(0);
@@ -118,38 +113,43 @@ export default class MainScene extends Phaser.Scene {
             .text(16, 92, 'Mueve el mouse para rotar la cámara', {
                 ...style,
                 fontSize: '16px',
-                color: '#c9d1d9'
+                color: '#00000088'
             })
             .setDepth(10)
             .setScrollFactor(0);
 
         this.add
-            .text(16, 114, 'Observa los estados de los NPC', {
+            .text(16, 114, 'E: ingresar a la fila', {
                 ...style,
                 fontSize: '16px',
-                color: '#c9d1d9'
+                color: '#00000088'
             })
             .setDepth(10)
             .setScrollFactor(0);
 
+
         // Create queue gap button (initially hidden)
         this.queueGapButton = this.add
-            .rectangle(window.innerWidth / 2, window.innerHeight - 80, 200, 50, 0x00aa00)
+            .rectangle(window.innerWidth / 2, window.innerHeight - 80, 300, 60, 0x00aa00)
             .setDepth(100)
             .setScrollFactor(0)
             .setInteractive()
             .on('pointerdown', () => this._tryInsertInQueue())
-            .setVisible(false);
+            .setVisible(false)
+            .setAlpha(0.9);
 
-        this.add
+        this.queueGapButtonText = this.add
             .text(
                 window.innerWidth / 2,
                 window.innerHeight - 80,
                 'Presiona E para colarte',
                 {
-                    ...style,
-                    fontSize: '14px',
-                    color: '#000000'
+                    fontFamily: 'monospace',
+                    fontSize: '18px',
+                    color: '#ffffff',
+                    fontStyle: 'bold',
+                    backgroundColor: '#00000066',
+                    padding: { x: 15, y: 8 }
                 }
             )
             .setOrigin(0.5)
@@ -204,15 +204,37 @@ export default class MainScene extends Phaser.Scene {
         const shouldShow = (gameState.nearQueueGap || gameState.playerInQueue) && !gameState.playerCaught;
         this.queueGapButton.setVisible(shouldShow);
 
-        const buttonText = this.children.getByName('queueGapButtonText');
+        const buttonText = this.queueGapButtonText;
         if (buttonText) {
-            // Update text depending on context
             if (gameState.playerInQueue) {
-                buttonText.setText('Presiona E para salir de la fila');
+                // Player is in queue - show exit message
+                buttonText.setText('[ E ] SALIR DE LA FILA');
+                buttonText.setStyle({ color: '#ffffff' });
+                this.queueGapButton.setFillStyle(0xcc3333); // Red for exit
             } else {
-                buttonText.setText('Presiona E para colarte');
+                // Player is near queue - show enter message
+                if (gameState.canInsert) {
+                    buttonText.setText('✓ [ E ] COLARSE - ¡NADIE MIRA!');
+                    buttonText.setStyle({ color: '#00ff00' });
+                    this.queueGapButton.setFillStyle(0x00aa00); // Green - safe
+                } else {
+                    buttonText.setText('✗ [ E ] ESPERA - ¡TE VERÁN!');
+                    buttonText.setStyle({ color: '#ffaa00' });
+                    this.queueGapButton.setFillStyle(0xff8800); // Orange - warning
+                }
             }
             buttonText.setVisible(shouldShow);
+        }
+
+        // Actualizar texto de estado global
+        if (this.npcStatusText) {
+            if (gameState.canInsert) {
+                this.npcStatusText.setText('NPCs: DISTRAÍDOS');
+                this.npcStatusText.setColor('#00ff00'); // Verde
+            } else {
+                this.npcStatusText.setText('NPCs: ALERTA');
+                this.npcStatusText.setColor('#ffaa00'); // Naranja
+            }
         }
 
         // Handle E key press
@@ -260,7 +282,7 @@ export default class MainScene extends Phaser.Scene {
         canvas.style.position = 'absolute';
         canvas.style.top = '0';
         canvas.style.left = '0';
-        canvas.style.zIndex = '1';
+        canvas.style.zIndex = '10';
     }
 
     _sizePhaserCanvas(width, height) {

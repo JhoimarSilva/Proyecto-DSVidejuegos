@@ -132,14 +132,17 @@ export class PlayerManager {
         }
 
         // set animation based on speed / in-air
-        const horizontalSpeedSq = this.player.velocity.lengthSq();
-        let desiredAction = 'idle';
-        if (!this.player.onGround) {
-            desiredAction = 'jump';
-        } else if (horizontalSpeedSq > 0.0001) {
-            desiredAction = this.player.input.run ? 'run' : 'walk';
+        // BUT only if not in queue (queue controls animation)
+        if (!this.player.inQueue) {
+            const horizontalSpeedSq = this.player.velocity.lengthSq();
+            let desiredAction = 'idle';
+            if (!this.player.onGround) {
+                desiredAction = 'jump';
+            } else if (horizontalSpeedSq > 0.0001) {
+                desiredAction = this.player.input.run ? 'run' : 'walk';
+            }
+            this._setPlayerAction(desiredAction);
         }
-        this._setPlayerAction(desiredAction);
 
         this._updateSpritePosition(this.player);
     }
@@ -206,24 +209,6 @@ export class PlayerManager {
         return actions;
     }
 
-    _setPlayerAction(name) {
-        if (!this.player.mixer) return;
-
-        const nextAction =
-            this.player.actions[name] ??
-            this.player.actions.walk ??
-            this.player.actions.idle ??
-            null;
-
-        if (!nextAction || this.player.activeAction === nextAction) return;
-
-        nextAction.reset().fadeIn(0.15).play();
-        if (this.player.activeAction && this.player.activeAction !== nextAction) {
-            this.player.activeAction.fadeOut(0.15);
-        }
-        this.player.activeAction = nextAction;
-    }
-
     _findClipByNames(animations = [], names = []) {
         for (const name of names) {
             const lowered = name.toLowerCase();
@@ -236,6 +221,23 @@ export class PlayerManager {
             if (clip) return clip;
         }
         return animations.length ? animations[0] : null;
+    }
+
+    _setPlayerAction(actionName) {
+        if (!this.player.mixer) return;
+
+        const action = this.player.actions[actionName];
+        if (!action) return;
+
+        if (this.player.activeAction !== action) {
+            // fade out old
+            if (this.player.activeAction) {
+                this.player.activeAction.fadeOut(0.2);
+            }
+            // fade in new
+            action.reset().fadeIn(0.2).play();
+            this.player.activeAction = action;
+        }
     }
 
     _updateSpritePosition(character, offset = 1.2) {
