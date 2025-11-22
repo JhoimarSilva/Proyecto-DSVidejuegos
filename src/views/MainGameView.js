@@ -97,20 +97,11 @@ export default class MainGameView extends Phaser.Scene {
             color: '#ffffff'
         };
 
-        // Mostrar nombre del jugador
-        const playerName = gameContext.getPlayerName();
-        const hudText = playerName ? `Jugador: ${playerName}` : 'Explora la escuela';
-
-        this.add
-            .text(16, 16, hudText, style)
-            .setDepth(10)
-            .setScrollFactor(0);
-
         this.add
             .text(16, 48, 'Mover: WASD / Flechas', {
                 ...style,
                 fontSize: '16px',
-                color: '#c9d1d9'
+                color: '#000000'
             })
             .setDepth(10)
             .setScrollFactor(0);
@@ -119,37 +110,28 @@ export default class MainGameView extends Phaser.Scene {
             .text(16, 70, 'Shift: Correr | Space: Saltar', {
                 ...style,
                 fontSize: '16px',
-                color: '#c9d1d9'
+                color: '#000000'
             })
             .setDepth(10)
             .setScrollFactor(0);
 
         this.add
-            .text(16, 92, 'Mueve el mouse para rotar la cámara', {
+            .text(16, 92, 'E: ingresar a la fila', {
                 ...style,
                 fontSize: '16px',
-                color: '#c9d1d9'
+                color: '#000000'
             })
             .setDepth(10)
             .setScrollFactor(0);
 
         this.add
-            .text(16, 114, 'Observa los estados de los NPC', {
+            .text(16, 114, 'Mueve el mouse para rotar la cámara', {
                 ...style,
                 fontSize: '16px',
-                color: '#c9d1d9'
+                color: '#000000'
             })
             .setDepth(10)
             .setScrollFactor(0);
-
-        // Botón para colarse en la fila
-        this.queueGapButton = this.add
-            .rectangle(window.innerWidth / 2, window.innerHeight - 80, 200, 50, 0x00aa00)
-            .setDepth(100)
-            .setScrollFactor(0)
-            .setInteractive()
-            .on('pointerdown', () => this._tryInsertInQueue())
-            .setVisible(false);
 
         this.add
             .text(
