@@ -100,7 +100,7 @@ export class NPCManager {
                     npcData.mixer = new THREE.AnimationMixer(gltf.scene);
 
                     const walkClip = this._findWalkClip(gltf.animations);
-                    const idleClip = THREE.AnimationClip.findByName(gltf.animations, 'Idle') ?? gltf.animations.find(c => (c.name||'').toLowerCase().includes('idle'));
+                    const idleClip = THREE.AnimationClip.findByName(gltf.animations, 'Idle') ?? gltf.animations.find(c => (c.name || '').toLowerCase().includes('idle'));
                     if (walkClip) {
                         npcData.actions.walk = npcData.mixer.clipAction(walkClip);
                         npcData.actions.walk.setEffectiveTimeScale(1);

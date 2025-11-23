@@ -60,7 +60,7 @@ export class QueueManager {
                         npc.actions.idle.stop && npc.actions.idle.stop();
                     }
                 }
-                npc.queueIndex = index;
+                // DON'T overwrite queueIndex here - it's managed by insertion/exit logic
             });
         } else {
             // idle: freeze positions and switch to idle anim if any
@@ -113,7 +113,8 @@ export class QueueManager {
             }
         });
 
-        return closestIndex;
+        // Return the position AFTER the closest NPC, so player inserts between NPCs
+        return closestIndex + 1;
     }
 
     isNearQueue(playerPos) {
@@ -166,12 +167,22 @@ export class QueueManager {
         // 1. Ordenar NPCs por su queueIndex real
         const orderedNPCs = [...this.npcManager.npcs].sort((a, b) => a.queueIndex - b.queueIndex);
 
-        // 2. Desplazar solo los NPC que están detrás del hueco
+        console.log('=== INSERTING PLAYER ===');
+        console.log('Insertion index:', index);
+        console.log('NPCs before insertion:', orderedNPCs.map(n => `NPC${n.queueIndex}`).join(', '));
+
+        // 2. Move NPCs at or after the insertion point forward by a smaller amount
+        // Instead of incrementing their queueIndex (which moves them a full spacing),
+        // we'll just shift them forward by a partial amount
+        const shiftDistance = this.queueConfig.spacing * 0.5; // Move forward by half spacing
+        const shiftVector = this.queueConfig.direction.clone().multiplyScalar(shiftDistance);
+
         orderedNPCs.forEach(npc => {
             if (npc.queueIndex >= index) {
                 npc.queueIndex++;
                 npc.queueMove.start.copy(npc.group.position);
-                npc.queueMove.target.copy(this.npcManager._getQueuePosition(npc.queueIndex));
+                // Instead of moving to the calculated position, just shift forward slightly
+                npc.queueMove.target.copy(npc.group.position).add(shiftVector);
                 npc.queueMove.elapsed = 0;
                 npc.queueMove.duration = this.queueConfig.moveDuration;
                 npc.queueMove.active = true;
@@ -182,6 +193,8 @@ export class QueueManager {
         orderedNPCs.sort((a, b) => a.queueIndex - b.queueIndex);
         this.npcManager.npcs.length = 0;
         orderedNPCs.forEach(n => this.npcManager.npcs.push(n));
+
+        console.log('NPCs after insertion:', orderedNPCs.map(n => `NPC${n.queueIndex}`).join(', '));
 
         // 3. Colocar al jugador en el hueco
         const pos = this.npcManager._getQueuePosition(index);
