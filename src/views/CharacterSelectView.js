@@ -12,19 +12,11 @@ export default class CharacterSelectView extends Phaser.Scene {
 
         // Lista de personajes disponibles
         this.characters = [
-            { name: 'Hombre 1', model: '/models/man1.glb' },
-            { name: 'Hombre 2', model: '/models/man2.glb' },
-            { name: 'Hombre 3', model: '/models/man3.glb' },
-            { name: 'Hombre 4', model: '/models/man4.glb' },
-            { name: 'Hombre 5', model: '/models/man5.glb' },
-            { name: 'Hombre 6', model: '/models/man6.glb' },
-            { name: 'Hombre 7', model: '/models/man8.glb' },
-            { name: 'Mujer 1', model: '/models/woman1.glb' },
-            { name: 'Mujer 2', model: '/models/woman2.glb' },
-            { name: 'Mujer 3', model: '/models/woman3.glb' },
-            { name: 'Mujer 4', model: '/models/woman4.glb' },
-            { name: 'Mujer 5', model: '/models/woman5.glb' },
-            { name: 'Mujer 6', model: '/models/woman6.glb' }
+            { name: 'Jorge', model: '/models/man1.glb' },
+            { name: 'Sebastían', model: '/models/man6.glb' },
+            { name: 'Diego', model: '/models/man8.glb' },
+            { name: 'Monica', model: '/models/woman1.glb' },
+            { name: 'Sofia', model: '/models/woman5.glb' }
         ];
 
         this.selectedIndex = 0;
