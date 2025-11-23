@@ -253,17 +253,15 @@ export class QueueManager {
 
         this.gameState.playerInQueue = false;
 
-        // 2. Empujar NPCs hacia adelante para abrir el hueco en donde estaba el jugador
+        // 2. Update queue indices for NPCs behind the player
+        // They don't need to move physically, just update their index
         const orderedNPCs = [...this.npcManager.npcs].sort((a, b) => a.queueIndex - b.queueIndex);
 
         orderedNPCs.forEach(npc => {
             if (npc.queueIndex > prevIndex) {
                 npc.queueIndex--;
-                npc.queueMove.start.copy(npc.group.position);
-                npc.queueMove.target.copy(this.npcManager._getQueuePosition(npc.queueIndex));
-                npc.queueMove.elapsed = 0;
-                npc.queueMove.duration = this.queueConfig.moveDuration;
-                npc.queueMove.active = true;
+                // Don't move NPCs physically when player exits
+                // They stay where they are, just update their logical position in queue
             }
         });
 

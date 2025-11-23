@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { gameContext } from '../../../contexts/GameContext.js';
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const CHARACTER_TARGET_HEIGHT = 1.8;
@@ -33,7 +34,12 @@ export class PlayerManager {
     }
 
     loadPlayer() {
-        const PLAYER_MODEL = '/models/man1.glb';
+        // Obtener el personaje seleccionado del GameContext
+        const selectedCharacter = gameContext.getSelectedCharacter();
+        const PLAYER_MODEL = selectedCharacter || '/models/man1.glb';
+
+        console.log('Cargando personaje del jugador:', PLAYER_MODEL);
+
         this.loader.load(
             PLAYER_MODEL,
             (gltf) => {
