@@ -97,6 +97,18 @@ export default class MainGameView extends Phaser.Scene {
             color: '#ffffff'
         };
 
+        // Mostrar nombre del jugador
+        const playerName = gameContext.getPlayerName() || 'Jugador';
+        this.add
+            .text(16, 16, `Jugador: ${playerName}`, {
+                ...style,
+                fontSize: '20px',
+                color: '#ffffff',
+                fontStyle: 'bold'
+            })
+            .setDepth(10)
+            .setScrollFactor(0);
+
         this.add
             .text(16, 48, 'Mover: WASD / Flechas', {
                 ...style,

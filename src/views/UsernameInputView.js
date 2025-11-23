@@ -28,14 +28,6 @@ export default class UsernameInputView extends Phaser.Scene {
         })
             .setOrigin(0.5);
 
-        // Mostrar personaje seleccionado
-        const selectedChar = gameContext.getSelectedCharacter();
-        this.add.text(width / 2, 120, `Personaje: ${selectedChar || 'No seleccionado'}`, {
-            ...style,
-            fontSize: '18px',
-            color: '#c9d1d9'
-        })
-            .setOrigin(0.5);
 
         // Campo de entrada de texto (simulado con Phaser)
         this.add.rectangle(width / 2, 200, 400, 60, 0x333333)
