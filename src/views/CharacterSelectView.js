@@ -216,17 +216,32 @@ export default class CharacterSelectView extends Phaser.Scene {
                 this.currentModel = model;
                 this.threeScene.add(model);
 
-                // Configurar animación idle si está disponible
+                // Configurar animación si está disponible
                 if (gltf.animations?.length) {
                     this.mixer = new THREE.AnimationMixer(model);
 
-                    // Buscar animación idle
-                    const idleClip = gltf.animations.find(clip =>
-                        clip.name.toLowerCase().includes('idle')
-                    ) || gltf.animations[0];
+                    // Determinar animación objetivo basada en el género
+                    const isFemale = character.model.toLowerCase().includes('woman');
+                    const targetAnimName = isFemale ? 'HumanArmature|Female_Punch' : 'HumanArmature|Man_Punch';
 
-                    if (idleClip) {
-                        const action = this.mixer.clipAction(idleClip);
+                    // Buscar animación: Específica -> (Fallback mujer) -> Idle -> Primera disponible
+                    let clip = gltf.animations.find(c => c.name === targetAnimName);
+
+                    // Fallback específico para mujer si tiene nombre diferente
+                    if (!clip && isFemale) {
+                        clip = gltf.animations.find(c => c.name === 'Armature|Punch');
+                    }
+
+                    if (!clip) {
+                        clip = gltf.animations.find(c => c.name.toLowerCase().includes('idle'));
+                    }
+
+                    if (!clip) {
+                        clip = gltf.animations[0];
+                    }
+
+                    if (clip) {
+                        const action = this.mixer.clipAction(clip);
                         action.play();
                     }
                 }

@@ -3,21 +3,22 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DEFAULT_NPC_STATE, NPC_STATE_ICONS, getRandomNpcState, setAllNpcsAngry, setAllNpcsDistracted } from '../npcStates.js';
 
 const NPC_POOL = [
+    '/models/man1.glb',
     '/models/man2.glb',
     '/models/man3.glb',
+    '/models/man4.glb',
+    '/models/man5.glb',
+    '/models/man6.glb',
+    '/models/man8.glb',
     '/models/woman1.glb',
     '/models/woman2.glb',
     '/models/woman3.glb',
-    '/models/woman4.glb'
+    '/models/woman4.glb',
+    '/models/woman5.glb',
+    '/models/woman6.glb'
 ];
 
-const NPC_POSITIONS = [
-    new THREE.Vector3(4, 0, -6),
-    new THREE.Vector3(-3, 0, -4),
-    new THREE.Vector3(2, 0, 2),
-    new THREE.Vector3(-5, 0, 5),
-    new THREE.Vector3(6, 0, 1)
-];
+const NPC_COUNT = 15;
 
 export class NPCManager {
     constructor(scene, loader, textureLoader) {
@@ -55,11 +56,24 @@ export class NPCManager {
     }
 
     spawnNpcs() {
-        NPC_POSITIONS.forEach((_, index) => {
-            const modelPath = NPC_POOL[index % NPC_POOL.length];
+        // Crear una lista barajada de modelos para evitar repeticiones consecutivas
+        let shuffledModels = [];
+
+        for (let i = 0; i < NPC_COUNT; i++) {
+            // Si nos quedamos sin modelos, rellenamos y barajamos de nuevo
+            if (shuffledModels.length === 0) {
+                shuffledModels = [...NPC_POOL];
+                // Algoritmo de Fisher-Yates para barajar
+                for (let j = shuffledModels.length - 1; j > 0; j--) {
+                    const k = Math.floor(Math.random() * (j + 1));
+                    [shuffledModels[j], shuffledModels[k]] = [shuffledModels[k], shuffledModels[j]];
+                }
+            }
+
+            const modelPath = shuffledModels.pop();
             const state = getRandomNpcState();
             this._loadNpc(modelPath, state);
-        });
+        }
     }
 
     _loadNpc(modelPath, stateKey) {
