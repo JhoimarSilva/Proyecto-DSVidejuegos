@@ -131,11 +131,7 @@ export class ThreeWorld {
 
     rotateCamera(deltaX) {
         const sensitivity = 0.0045;
-        this.cameraYaw += deltaX * sensitivity;
-    }
-
-    changeStateIcon(stateKey) {
-        // TODO: Implement player state icon if needed
+        this.cameraYaw -= deltaX * sensitivity;
     }
 
     getGameState() {

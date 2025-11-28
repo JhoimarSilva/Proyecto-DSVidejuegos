@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
-import MainMenuView from '../views/MainMenuView.js';
-import CharacterSelectView from '../views/CharacterSelectView.js';
-import UsernameInputView from '../views/UsernameInputView.js';
-import MainGameView from '../views/MainGameView.js';
+import MainMenuView from './views/MainMenuView.js';
+import CharacterSelectView from './views/CharacterSelectView.js';
+import UsernameInputView from './views/UsernameInputView.js';
+import MainGameView from './views/MainGameView.js';
 
 export function createGameConfig() {
     const width = window.innerWidth;
