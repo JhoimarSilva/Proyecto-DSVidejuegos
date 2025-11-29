@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
+import * as THREE from 'three';
 import { ThreeWorld } from '../three/world/ThreeWorld.js';
 import { gameContext } from '../contexts/GameContext.js';
+import { DistractionAbilities } from './DistractionAbilities.js';
+import { distractAllNpcs, distractNearbyNpcs, distractNpcsInArea } from '../three/world/npcStates.js';
 
 /**
  * MainGameView - Escena del juego principal donde el jugador explora y se cuela en la fila
@@ -19,11 +22,16 @@ export default class MainGameView extends Phaser.Scene {
         this.eKey = null;
         this.ambiente = null;
         this.sonandoAbucheo = false;
+        this.distractionAbilities = null;
+        this.abilityKeys = null;
     }
 
     preload() {
         this.load.audio('alerta', '/sounds/ambiente.wav');
         this.load.audio('descubierto', '/sounds/abucheos.wav');
+        this.load.audio('bomba', '/sounds/bomba.mp3');
+        this.load.audio('sonido_vergonzoso', '/sounds/pedo.mp3');
+        this.load.audio('silbido', '/sounds/silbar.mp3');
     }
 
     create() {
@@ -72,6 +80,7 @@ export default class MainGameView extends Phaser.Scene {
     update(_, delta) {
         this._updatePlayerInput();
         this._updateQueueGapUI();
+        this._updateAbilities(delta);
         this.threeWorld?.update(delta);
     }
 
@@ -175,6 +184,9 @@ export default class MainGameView extends Phaser.Scene {
             .setScrollFactor(0)
             .setVisible(false)
             .setName('queueGapButtonText');
+
+        // Crear sistema de habilidades de distracción
+        this.distractionAbilities = new DistractionAbilities(this);
     }
 
     _createControls() {
@@ -204,6 +216,13 @@ export default class MainGameView extends Phaser.Scene {
         this.runKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
         this.jumpKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
         this.eKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+
+        // Teclas para habilidades de distracción
+        this.abilityKeys = {
+            bomb: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
+            sound: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
+            whistle: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.THREE)
+        };
 
         this._setupPointerRotation();
     }
@@ -282,6 +301,7 @@ export default class MainGameView extends Phaser.Scene {
 
         this._sizePhaserCanvas(width, height);
         this.threeWorld?.resize(width, height);
+        this.distractionAbilities?.resize(width, height);
     }
 
     _configurePhaserCanvas() {
@@ -305,8 +325,128 @@ export default class MainGameView extends Phaser.Scene {
         this.runKey?.destroy();
         this.jumpKey?.destroy();
         this.eKey?.destroy();
+        this.abilityKeys?.bomb?.destroy();
+        this.abilityKeys?.sound?.destroy();
+        this.abilityKeys?.whistle?.destroy();
         this._teardownPointerRotation();
+        this.distractionAbilities?.destroy();
         this.threeWorld?.destroy();
+    }
+
+    _updateAbilities(delta) {
+        if (!this.distractionAbilities || !this.threeWorld) {
+            return;
+        }
+
+        // Actualizar cooldowns
+        this.distractionAbilities.update(delta);
+
+        // Habilidad 1: Bomba de distracción (tecla 1)
+        if (this.abilityKeys?.bomb && Phaser.Input.Keyboard.JustDown(this.abilityKeys.bomb)) {
+            if (this.distractionAbilities.useAbility('bomb')) {
+                this._activateBombAbility();
+            }
+        }
+
+        // Habilidad 2: Sonido vergonzoso (tecla 2)
+        if (this.abilityKeys?.sound && Phaser.Input.Keyboard.JustDown(this.abilityKeys.sound)) {
+            if (this.distractionAbilities.useAbility('sound')) {
+                this._activateSoundAbility();
+            }
+        }
+
+        // Habilidad 3: Silbido fuerte (tecla 3)
+        if (this.abilityKeys?.whistle && Phaser.Input.Keyboard.JustDown(this.abilityKeys.whistle)) {
+            if (this.distractionAbilities.useAbility('whistle')) {
+                this._activateWhistleAbility();
+            }
+        }
+    }
+
+    _activateBombAbility() {
+        console.log('💣 Bomba de distracción activada!');
+
+        // Reproducir sonido
+        this.sound.play('bomba', { volume: 0.5 });
+
+        // Distraer a TODOS los NPCs
+        const npcs = this.threeWorld.npcManager?.npcs;
+        if (npcs) {
+            distractAllNpcs(npcs, 5000);
+        }
+
+        // Feedback visual
+        this._showAbilityFeedback('¡Bomba detonada! Todos los NPCs distraídos', 0xff6b35);
+    }
+
+    _activateSoundAbility() {
+        console.log('📢 Sonido vergonzoso activado!');
+
+        // Reproducir sonido
+        this.sound.play('sonido_vergonzoso', { volume: 0.7 });
+
+        // Distraer NPCs cercanos
+        const playerPosition = this.threeWorld.playerManager?.getPosition();
+        const npcs = this.threeWorld.npcManager?.npcs;
+        if (npcs && playerPosition) {
+            distractNearbyNpcs(npcs, playerPosition, 5, 4000);
+        }
+
+        // Feedback visual
+        this._showAbilityFeedback('¡NPCs cercanos distraídos!', 0xffd700);
+    }
+
+    _activateWhistleAbility() {
+        console.log('👄 Silbido fuerte activado!');
+
+        // Reproducir sonido
+        this.sound.play('silbido', { volume: 0.6 });
+
+        // Distraer NPCs en dirección del jugador
+        const playerPosition = this.threeWorld.playerManager?.getPosition();
+        const npcs = this.threeWorld.npcManager?.npcs;
+
+        if (npcs && playerPosition && this.threeWorld.camera) {
+            // Obtener dirección de la cámara como dirección del jugador
+            const cameraDirection = new THREE.Vector3();
+            this.threeWorld.camera.getWorldDirection(cameraDirection);
+            cameraDirection.y = 0; // Proyectar en el plano horizontal
+            cameraDirection.normalize();
+
+            distractNpcsInArea(npcs, playerPosition, cameraDirection, 8, Math.PI / 3, 3000);
+        }
+
+        // Feedback visual
+        this._showAbilityFeedback('¡Silbido en el área!', 0x4ecdc4);
+    }
+
+    _showAbilityFeedback(message, color) {
+        const width = this.scale.width;
+        const height = this.scale.height;
+
+        const feedbackText = this.add.text(width / 2, height / 2 - 100, message, {
+            fontFamily: 'monospace',
+            fontSize: '24px',
+            color: '#ffffff',
+            fontStyle: 'bold',
+            backgroundColor: `#${color.toString(16).padStart(6, '0')}cc`,
+            padding: { x: 20, y: 10 }
+        })
+            .setOrigin(0.5)
+            .setDepth(300)
+            .setScrollFactor(0);
+
+        // Animación de fade out
+        this.tweens.add({
+            targets: feedbackText,
+            alpha: 0,
+            y: height / 2 - 150,
+            duration: 2000,
+            ease: 'Power2',
+            onComplete: () => {
+                feedbackText.destroy();
+            }
+        });
     }
 
     _setupPointerRotation() {
