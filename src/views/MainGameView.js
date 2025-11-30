@@ -157,18 +157,18 @@ export default class MainGameView extends Phaser.Scene {
 
         // Create queue gap button (initially hidden)
         this.queueGapButton = this.add
-            .rectangle(window.innerWidth / 2, window.innerHeight - 80, 300, 60, 0x00aa00)
+            .rectangle(window.innerWidth / 2, window.innerHeight - 180, 300, 60, 0x00aa00)
             .setDepth(100)
             .setScrollFactor(0)
             .setInteractive()
             .on('pointerdown', () => this._tryInsertInQueue())
             .setVisible(false)
-            .setAlpha(0.9);
+            .setAlpha(0);
 
         this.queueGapButtonText = this.add
             .text(
                 window.innerWidth / 2,
-                window.innerHeight - 80,
+                window.innerHeight - 140,
                 'Presiona E para colarte',
                 {
                     fontFamily: 'monospace',

@@ -53,6 +53,8 @@ export class NPCManager {
             idleTime: 7,
             cycleDuration: 12
         };
+        this.gameState.cooldownTimer = 0;
+        this.gameState.cooldownDuration = 15;
     }
 
     spawnNpcs() {
@@ -288,6 +290,30 @@ export class NPCManager {
         }
     }
 
+    updateCooldown(deltaSeconds) {
+        if (this.gameState.playerCaught && this.gameState.cooldownTimer > 0) {
+            this.gameState.cooldownTimer -= deltaSeconds;
+            if (this.gameState.cooldownTimer <= 0) {
+                this.gameState.cooldownTimer = 0;
+                this._recoverFromCaught();
+            }
+        }
+    }
+
+    _recoverFromCaught() {
+        console.log("Cooldown finished. Player can try to sneak again if NPCs are distracted.");
+        this.gameState.playerCaught = false;
+
+        // Reset NPCs from angry to random states so they can eventually be distracted
+        this.npcs.forEach((npc) => {
+            if (npc.stateKey === 'angry') {
+                npc.stateKey = getRandomNpcState();
+                npc.distractionTimer = Math.random() * 8; // Randomize timer to desync them slightly
+                this._applySpriteTexture(npc.sprite, npc.stateKey);
+            }
+        });
+    }
+
     _updateSpritePosition(character, offset = 1.2) {
         const tempVector = new THREE.Vector3();
         if (!character?.headBone || !character.sprite) return;
@@ -307,7 +333,11 @@ export class NPCManager {
     }
 
     playerCaught(soundManager = null) {
+        if (this.gameState.playerCaught) return; // Already caught
+
         this.gameState.playerCaught = true;
+        this.gameState.cooldownTimer = this.gameState.cooldownDuration;
+
         setAllNpcsAngry(this.npcs);
         this.npcs.forEach((npc) => {
             npc.stateKey = 'angry';

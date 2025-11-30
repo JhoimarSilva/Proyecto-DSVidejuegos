@@ -83,6 +83,7 @@ export class ThreeWorld {
         this.playerManager.updatePlayer(deltaSeconds, cameraDirection, cameraRight);
         this.npcManager.updateNpcs(deltaSeconds);
         this.npcManager.updateGlobalDistract(deltaSeconds);
+        this.npcManager.updateCooldown(deltaSeconds);
         this.queueManager.updateQueue(deltaSeconds);
         this.queueManager.updateQueueCutting(deltaSeconds, this.playerManager.getPosition());
 
