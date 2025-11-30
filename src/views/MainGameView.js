@@ -185,6 +185,20 @@ export default class MainGameView extends Phaser.Scene {
             .setVisible(false)
             .setName('queueGapButtonText');
 
+        this.cooldownText = this.add
+            .text(window.innerWidth / 2, window.innerHeight / 2, '', {
+                fontFamily: 'monospace',
+                fontSize: '32px',
+                color: '#ff0000',
+                fontStyle: 'bold',
+                backgroundColor: '#000000aa',
+                padding: { x: 20, y: 10 }
+            })
+            .setOrigin(0.5)
+            .setDepth(200)
+            .setScrollFactor(0)
+            .setVisible(false);
+
         // Crear sistema de habilidades de distracción
         this.distractionAbilities = new DistractionAbilities(this);
     }
@@ -251,6 +265,14 @@ export default class MainGameView extends Phaser.Scene {
         }
 
         const gameState = this.threeWorld.getGameState();
+
+        // Update cooldown text
+        if (gameState.playerCaught && gameState.cooldownTimer > 0) {
+            this.cooldownText.setText(`¡Descubierto! Espera: ${Math.ceil(gameState.cooldownTimer)}s`);
+            this.cooldownText.setVisible(true);
+        } else {
+            this.cooldownText.setVisible(false);
+        }
 
         const shouldShow = (gameState.nearQueueGap || gameState.playerInQueue) && !gameState.playerCaught;
         this.queueGapButton.setVisible(shouldShow);

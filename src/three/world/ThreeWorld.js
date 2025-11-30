@@ -144,7 +144,8 @@ export class ThreeWorld {
             queueGapIndex: this.npcManager.gameState.queueGapIndex,
             queueGapPosition: this.npcManager.gameState.queueGapIndex !== null ?
                 this.queueManager.getQueuePosition(this.npcManager.gameState.queueGapIndex) : null,
-            canInsert: this.npcManager.canPlayerInsert()
+            canInsert: this.npcManager.canPlayerInsert(),
+            cooldownTimer: this.npcManager.gameState.cooldownTimer
         };
     }
 

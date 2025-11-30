@@ -370,7 +370,8 @@ export class NPCManager {
             npcsAngry: this.npcs.some((npc) => npc.stateKey === 'angry'),
             nearQueueGap: false,
             queueGapIndex: this.gameState.queueGapIndex,
-            queueGapPosition: this.gameState.queueGapIndex !== null ? this._getQueuePosition(this.gameState.queueGapIndex) : null
+            queueGapPosition: this.gameState.queueGapIndex !== null ? this._getQueuePosition(this.gameState.queueGapIndex) : null,
+            cooldownTimer: this.gameState.cooldownTimer
         };
     }
 }
