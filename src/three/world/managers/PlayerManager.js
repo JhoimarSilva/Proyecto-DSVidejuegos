@@ -48,7 +48,7 @@ export class PlayerManager {
 
                 const group = new THREE.Group();
                 group.add(model);
-                group.position.set(0, 0, 0);
+                group.position.set(-65, 4, -10);
                 this.scene.add(group);
 
                 this.player.group = group;

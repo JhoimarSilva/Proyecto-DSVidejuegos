@@ -27,8 +27,8 @@ export class NPCManager {
         this.textureLoader = textureLoader;
         this.npcs = [];
         this.queueConfig = {
-            root: new THREE.Vector3(-5, 0, -4),
-            direction: new THREE.Vector3(0, 0, 1).normalize(),
+            root: new THREE.Vector3(45, 4, 0),
+            direction: new THREE.Vector3(0, 0, -1).normalize(),
             spacing: 1.8,
             advanceInterval: 10,
             moveDuration: 1.2,
