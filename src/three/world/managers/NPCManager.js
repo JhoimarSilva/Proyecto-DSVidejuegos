@@ -32,7 +32,9 @@ export class NPCManager {
             spacing: 1.8,
             advanceInterval: 10,
             moveDuration: 1.2,
-            timer: 0
+            timer: 0,
+            // heightOffset applied to every queue position (useful to nudge NPCs up/down)
+            heightOffset: 3
         };
         this.gameState = {
             playerCaught: false,
@@ -148,6 +150,9 @@ export class NPCManager {
         npc.queueIndex = index;
         const position = this._getQueuePosition(index);
         npc.group.position.copy(position);
+        // Debug log to help verify spawn height/position
+        // Keep logs concise; they can be removed later
+        console.log(`NPC assigned index ${index} at`, position.x.toFixed(2), position.y.toFixed(2), position.z.toFixed(2));
         npc.queueMove = {
             start: position.clone(),
             target: position.clone(),
@@ -224,7 +229,20 @@ export class NPCManager {
 
     _getQueuePosition(index) {
         const { root, direction, spacing } = this.queueConfig;
-        return root.clone().add(direction.clone().multiplyScalar(index * spacing));
+        const pos = root.clone().add(direction.clone().multiplyScalar(index * spacing));
+        // Apply optional vertical offset
+        const h = typeof this.queueConfig.heightOffset === 'number' ? this.queueConfig.heightOffset : 0;
+        pos.y += h;
+        return pos;
+    }
+
+    /**
+     * Public API to adjust queue vertical offset (useful to nudge NPCs up/down).
+     * Example: `npcManager.setQueueHeight(0.8)`
+     */
+    setQueueHeight(offset) {
+        this.queueConfig.heightOffset = Number(offset) || 0;
+        console.log('NPCManager: queue height offset set to', this.queueConfig.heightOffset);
     }
 
     updateNpcs(deltaSeconds) {
