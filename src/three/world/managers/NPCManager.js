@@ -18,7 +18,9 @@ const NPC_POOL = [
     '/models/woman6.glb'
 ];
 
-const NPC_COUNT = 15;
+const NPC_COUNT = 50;
+const QUEUE_NPC_COUNT = 15; // NPCs en la cola
+const WANDERING_NPC_COUNT = NPC_COUNT - QUEUE_NPC_COUNT; // NPCs caminando al azar
 
 export class NPCManager {
     constructor(scene, loader, textureLoader) {
@@ -26,13 +28,18 @@ export class NPCManager {
         this.loader = loader;
         this.textureLoader = textureLoader;
         this.npcs = [];
+        this.wanderRadius = 50; // Radio de deambulación alrededor del centro
+        this.wanderCenterX = 0; // Centro del área de deambulación
+        this.wanderCenterZ = 0;
         this.queueConfig = {
-            root: new THREE.Vector3(-5, 0, -4),
-            direction: new THREE.Vector3(0, 0, 1).normalize(),
+            root: new THREE.Vector3(36, 4, 0),
+            direction: new THREE.Vector3(0, 0, -1).normalize(),
             spacing: 1.8,
             advanceInterval: 10,
             moveDuration: 1.2,
-            timer: 0
+            timer: 0,
+            // heightOffset applied to every queue position (useful to nudge NPCs up/down)
+            heightOffset: 3
         };
         this.gameState = {
             playerCaught: false,
@@ -53,6 +60,8 @@ export class NPCManager {
             idleTime: 7,
             cycleDuration: 12
         };
+        this.gameState.cooldownTimer = 0;
+        this.gameState.cooldownDuration = 15;
     }
 
     spawnNpcs() {
@@ -72,11 +81,12 @@ export class NPCManager {
 
             const modelPath = shuffledModels.pop();
             const state = getRandomNpcState();
-            this._loadNpc(modelPath, state);
+            const isInQueue = i < QUEUE_NPC_COUNT;
+            this._loadNpc(modelPath, state, isInQueue);
         }
     }
 
-    _loadNpc(modelPath, stateKey) {
+    _loadNpc(modelPath, stateKey, isInQueue = true) {
         this.loader.load(
             modelPath,
             (gltf) => {
@@ -88,8 +98,12 @@ export class NPCManager {
                 this.scene.add(npcGroup);
 
                 const headBone = this._findHeadBone(gltf.scene);
-                const sprite = this._createStateSprite(stateKey, 0.55);
-                this.scene.add(sprite);
+                // Crear sprite sólo para NPCs que están en la cola
+                let sprite = null;
+                if (isInQueue) {
+                    sprite = this._createStateSprite(stateKey, 0.55);
+                    this.scene.add(sprite);
+                }
 
                 const npcData = {
                     group: npcGroup,
@@ -98,8 +112,8 @@ export class NPCManager {
                     stateKey,
                     mixer: null,
                     actions: {},
-                    role: 'queue',
-                    queueIndex: this.npcs.length,
+                    role: isInQueue ? 'queue' : 'wandering',
+                    queueIndex: isInQueue ? this.npcs.length : null,
                     queueMove: {
                         start: new THREE.Vector3(),
                         target: new THREE.Vector3(),
@@ -107,7 +121,14 @@ export class NPCManager {
                         duration: this.queueConfig.moveDuration,
                         active: false
                     },
-                    distractionTimer: Math.random() * 8
+                    // Propiedades de deambulación
+                    wanderTarget: new THREE.Vector3(),
+                    wanderSpeed: 0.8 + Math.random() * 0.6, // Entre 0.8 y 1.4
+                    wanderChangeTimer: 0,
+                    wanderChangeDuration: 3 + Math.random() * 4, // Cambiar dirección cada 3-7 seg
+                    isWalking: false,
+                    distractionTimer: Math.random() * 8,
+                    distractionDuration: 0
                 };
 
                 if (gltf.animations?.length) {
@@ -130,9 +151,17 @@ export class NPCManager {
                     Object.values(npcData.actions).forEach(a => a && a.play && (a.paused = true));
                 }
 
-                this._assignNpcToQueue(npcData, npcData.queueIndex);
+                // Posicionar según rol
+                if (isInQueue) {
+                    this._assignNpcToQueue(npcData, this.npcs.filter(n => n.role === 'queue').length);
+                } else {
+                    // Colocar en posición aleatoria en el área de deambulación
+                    this._spawnWanderingNpc(npcData);
+                }
+                
                 this.npcs.push(npcData);
-                this._applySpriteTexture(sprite, stateKey);
+                // Aplicar textura sólo si existe sprite (los wanderers no usan estados)
+                this._applySpriteTexture(npcData.sprite, stateKey);
             },
             undefined,
             (error) => {
@@ -145,6 +174,9 @@ export class NPCManager {
         npc.queueIndex = index;
         const position = this._getQueuePosition(index);
         npc.group.position.copy(position);
+        // Debug log to help verify spawn height/position
+        // Keep logs concise; they can be removed later
+        console.log(`NPC assigned index ${index} at`, position.x.toFixed(2), position.y.toFixed(2), position.z.toFixed(2));
         npc.queueMove = {
             start: position.clone(),
             target: position.clone(),
@@ -152,6 +184,58 @@ export class NPCManager {
             duration: this.queueConfig.moveDuration,
             active: false
         };
+    }
+
+    /**
+     * Spawner para NPCs que deambulan libremente
+     */
+    _spawnWanderingNpc(npc) {
+        // Usar la misma altura Y que los NPCs de la fila para no atravesar el piso
+        const queueY = this.queueConfig.root.y + this.queueConfig.heightOffset;
+        
+        // Posición inicial aleatoria dentro del radio de deambulación
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * this.wanderRadius;
+        const x = this.wanderCenterX + Math.cos(angle) * distance;
+        const z = this.wanderCenterZ + Math.sin(angle) * distance;
+        
+        npc.group.position.set(x, queueY, z);
+        
+        // Establecer primer target de deambulación
+        this._setNewWanderTarget(npc);
+    }
+
+    /**
+     * Genera un nuevo punto de destino para el deambulaje
+     */
+    _setNewWanderTarget(npc) {
+        const queueY = this.queueConfig.root.y + this.queueConfig.heightOffset;
+        const angle = Math.random() * Math.PI * 2;
+        const distance = 5 + Math.random() * 10; // Moverse 5-15 unidades
+        
+        npc.wanderTarget.x = npc.group.position.x + Math.cos(angle) * distance;
+        npc.wanderTarget.z = npc.group.position.z + Math.sin(angle) * distance;
+        npc.wanderTarget.y = queueY; // Mantener altura del terreno
+        
+        // Restringir dentro del radio de deambulación
+        const centerDist = Math.sqrt(
+            Math.pow(npc.wanderTarget.x - this.wanderCenterX, 2) +
+            Math.pow(npc.wanderTarget.z - this.wanderCenterZ, 2)
+        );
+        
+        if (centerDist > this.wanderRadius) {
+            const excess = centerDist - this.wanderRadius;
+            const backDir = new THREE.Vector3(
+                npc.wanderTarget.x - this.wanderCenterX,
+                0,
+                npc.wanderTarget.z - this.wanderCenterZ
+            ).normalize();
+            npc.wanderTarget.x -= backDir.x * excess;
+            npc.wanderTarget.z -= backDir.z * excess;
+        }
+        
+        npc.wanderChangeTimer = 0;
+        npc.isWalking = true;
     }
 
     _prepareCharacterModel(root, targetHeight = 1.8) {
@@ -221,17 +305,51 @@ export class NPCManager {
 
     _getQueuePosition(index) {
         const { root, direction, spacing } = this.queueConfig;
-        return root.clone().add(direction.clone().multiplyScalar(index * spacing));
+        const pos = root.clone().add(direction.clone().multiplyScalar(index * spacing));
+        // Apply optional vertical offset
+        const h = typeof this.queueConfig.heightOffset === 'number' ? this.queueConfig.heightOffset : 0;
+        pos.y += h;
+        return pos;
+    }
+
+    /**
+     * Public API to adjust queue vertical offset (useful to nudge NPCs up/down).
+     * Example: `npcManager.setQueueHeight(0.8)`
+     */
+    setQueueHeight(offset) {
+        this.queueConfig.heightOffset = Number(offset) || 0;
+        console.log('NPCManager: queue height offset set to', this.queueConfig.heightOffset);
     }
 
     updateNpcs(deltaSeconds) {
         this.npcs.forEach((npc) => {
             npc.mixer?.update(deltaSeconds * 0.5);
 
+            // Actualizar NPCs que deambulan
+            if (npc.role === 'wandering') {
+                this._updateWanderingNpc(npc, deltaSeconds);
+                // NPCs deambulantes no cambian de estado
+                this._updateSpritePosition(npc, 1.1);
+                return;
+            }
+
+            // Solo aplicar cambios de estado a NPCs de la fila
             if (this.gameState.globalDistractActive) {
                 if (npc.stateKey !== 'angry') {
                     npc.stateKey = 'distracted';
                     this._applySpriteTexture(npc.sprite, 'distracted');
+                }
+            } else if (npc.distractionDuration > 0) {
+                // Handle forced distraction (abilities) - duration is in milliseconds
+                npc.distractionDuration -= deltaSeconds * 1000;
+                if (npc.stateKey !== 'distracted' && npc.stateKey !== 'angry') {
+                    npc.stateKey = 'distracted';
+                    this._applySpriteTexture(npc.sprite, 'distracted');
+                }
+                if (npc.distractionDuration <= 0) {
+                    npc.distractionDuration = 0;
+                    // Resume normal cycle but randomize slightly to avoid sync
+                    npc.distractionTimer = Math.random() * 8;
                 }
             } else {
                 npc.distractionTimer = (npc.distractionTimer ?? 0) + deltaSeconds;
@@ -266,6 +384,60 @@ export class NPCManager {
         });
     }
 
+    /**
+     * Actualiza el movimiento de un NPC que deambula libremente
+     */
+    _updateWanderingNpc(npc, deltaSeconds) {
+        // Aumentar el timer de cambio de dirección
+        npc.wanderChangeTimer += deltaSeconds;
+
+        // Si llegó la hora de cambiar dirección
+        if (npc.wanderChangeTimer >= npc.wanderChangeDuration) {
+            this._setNewWanderTarget(npc);
+        }
+
+        // Calcular dirección hacia el target
+        const direction = new THREE.Vector3().subVectors(npc.wanderTarget, npc.group.position);
+        const distanceToTarget = direction.length();
+
+        // Si está lo suficientemente cerca del target, cambiar dirección
+        if (distanceToTarget < 0.5) {
+            this._setNewWanderTarget(npc);
+            npc.isWalking = false;
+            // Parar animación de caminar y reproducir idle si existe
+            if (npc.actions.walk) {
+                try { npc.actions.walk.stop(); } catch (e) { /* ignore */ }
+            }
+            if (npc.actions.idle) {
+                try { npc.actions.idle.reset(); npc.actions.idle.play(); npc.actions.idle.paused = false; } catch (e) { /* ignore */ }
+            }
+        } else {
+            // Moverse hacia el target
+            direction.normalize();
+            npc.group.position.addScaledVector(direction, npc.wanderSpeed * deltaSeconds);
+            
+            // Hacer que mire en la dirección de movimiento
+            npc.group.lookAt(npc.wanderTarget);
+            
+            // Animar caminata
+            if (npc.actions.walk) {
+                try {
+                    // Asegurar que la acción esté reproduciéndose y con velocidad acorde
+                    if (!npc.actions.walk.isRunning()) {
+                        npc.actions.walk.reset();
+                        npc.actions.walk.play();
+                    }
+                    // Ajustar velocidad de la animación según la velocidad de deambulación
+                    if (typeof npc.actions.walk.setEffectiveTimeScale === 'function') {
+                        npc.actions.walk.setEffectiveTimeScale(npc.wanderSpeed);
+                    }
+                    npc.actions.walk.paused = false;
+                } catch (e) { /* ignore animation errors */ }
+            }
+            npc.isWalking = true;
+        }
+    }
+
     updateGlobalDistract(deltaSeconds) {
         const gs = this.gameState;
         if (!this.npcs.length) return;
@@ -288,6 +460,30 @@ export class NPCManager {
         }
     }
 
+    updateCooldown(deltaSeconds) {
+        if (this.gameState.playerCaught && this.gameState.cooldownTimer > 0) {
+            this.gameState.cooldownTimer -= deltaSeconds;
+            if (this.gameState.cooldownTimer <= 0) {
+                this.gameState.cooldownTimer = 0;
+                this._recoverFromCaught();
+            }
+        }
+    }
+
+    _recoverFromCaught() {
+        console.log("Cooldown finished. Player can try to sneak again if NPCs are distracted.");
+        this.gameState.playerCaught = false;
+
+        // Reset NPCs from angry to random states so they can eventually be distracted
+        this.npcs.forEach((npc) => {
+            if (npc.stateKey === 'angry') {
+                npc.stateKey = getRandomNpcState();
+                npc.distractionTimer = Math.random() * 8; // Randomize timer to desync them slightly
+                this._applySpriteTexture(npc.sprite, npc.stateKey);
+            }
+        });
+    }
+
     _updateSpritePosition(character, offset = 1.2) {
         const tempVector = new THREE.Vector3();
         if (!character?.headBone || !character.sprite) return;
@@ -307,7 +503,11 @@ export class NPCManager {
     }
 
     playerCaught(soundManager = null) {
+        if (this.gameState.playerCaught) return; // Already caught
+
         this.gameState.playerCaught = true;
+        this.gameState.cooldownTimer = this.gameState.cooldownDuration;
+
         setAllNpcsAngry(this.npcs);
         this.npcs.forEach((npc) => {
             npc.stateKey = 'angry';
@@ -319,8 +519,43 @@ export class NPCManager {
         }
     }
 
-    canPlayerInsert() {
-        return this.npcs.every(npc => npc.stateKey === 'distracted');
+    canPlayerInsert(targetIndex = null) {
+        if (targetIndex === null) {
+            // If no index provided, check if ALL are distracted (legacy/strict mode)
+            // Or we could check if ANY gap is safe?
+            // For now, let's keep it strict for general query, but maybe relax it if we want the UI to show green even if only some are distracted.
+            // Let's relax it: return true if there is at least one safe gap?
+            // Actually, the UI uses this to show if insertion is possible.
+            // If we return true here, the UI might say "Press E", but if the player is at a dangerous spot, they get caught.
+            // So for general query without index, maybe we should rely on the caller to pass the index.
+            // If the caller doesn't pass index, they probably mean "is it safe generally?".
+            // Let's stick to the previous behavior if no index is passed, OR check if the current queueGapIndex is safe.
+            if (this.gameState.queueGapIndex !== null) {
+                return this._areNeighborsDistracted(this.gameState.queueGapIndex);
+            }
+            return this.npcs.every(npc => npc.stateKey === 'distracted');
+        }
+
+        return this._areNeighborsDistracted(targetIndex);
+    }
+
+    _areNeighborsDistracted(index) {
+        // Check the NPC at the index (who will be pushed back) and the one before it (who will be behind)
+        // If index is 0, check NPC 0.
+        // If index is length, check NPC length-1.
+
+        // Let's check a small radius around the insertion point.
+        // The most critical one is the one we are stepping in front of (index)
+        // and the one we are stepping behind (index-1).
+
+        const npcAtSpot = this.npcs.find(n => n.queueIndex === index);
+        const npcBehind = this.npcs.find(n => n.queueIndex === index - 1);
+
+        let safe = true;
+        if (npcAtSpot && npcAtSpot.stateKey !== 'distracted') safe = false;
+        if (npcBehind && npcBehind.stateKey !== 'distracted') safe = false;
+
+        return safe;
     }
 
     resetGameState() {
@@ -340,7 +575,8 @@ export class NPCManager {
             npcsAngry: this.npcs.some((npc) => npc.stateKey === 'angry'),
             nearQueueGap: false,
             queueGapIndex: this.gameState.queueGapIndex,
-            queueGapPosition: this.gameState.queueGapIndex !== null ? this._getQueuePosition(this.gameState.queueGapIndex) : null
+            queueGapPosition: this.gameState.queueGapIndex !== null ? this._getQueuePosition(this.gameState.queueGapIndex) : null,
+            cooldownTimer: this.gameState.cooldownTimer
         };
     }
 }

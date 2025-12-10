@@ -154,7 +154,7 @@ export class QueueManager {
             queueIndex = this.getNearestQueueIndex(playerGroup.position);
         }
 
-        if (!this.npcManager.canPlayerInsert()) {
+        if (!this.npcManager.canPlayerInsert(queueIndex)) {
             this.npcManager.playerCaught(this.soundManager);
             return false;
         }
@@ -205,16 +205,18 @@ export class QueueManager {
                 start: new THREE.Vector3(),
                 target: new THREE.Vector3(),
                 elapsed: 0,
-                duration: this.queueConfig.moveDuration,
+                duration: 0.35, // duración corta para una incorporación suave
                 active: false
             };
         }
 
+        // No teletransportar: interpolar desde la posición actual hacia la posición de la fila
         playerGroup.queueIndex = index;
         playerGroup.queueMove.start.copy(playerGroup.position);
         playerGroup.queueMove.target.copy(pos);
         playerGroup.queueMove.elapsed = 0;
-        playerGroup.queueMove.duration = this.queueConfig.moveDuration;
+        // usar una duración corta para hacer la incorporación suave
+        playerGroup.queueMove.duration = 0.35;
         playerGroup.queueMove.active = true;
 
         // Cara hacia la fila
@@ -278,7 +280,7 @@ export class QueueManager {
 
     movePlayerToQueueIndex(playerGroup, newIndex) {
         if (!this.gameState.playerInQueue) return false;
-        if (!this.npcManager.canPlayerInsert()) {
+        if (!this.npcManager.canPlayerInsert(newIndex)) {
             this.npcManager.playerCaught(this.soundManager);
             return false;
         }

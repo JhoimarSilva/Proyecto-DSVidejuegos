@@ -44,13 +44,37 @@ export class ThreeWorld {
         // Initialize managers
         this.worldManager = new WorldManager(this.scene, this.renderer);
         this.npcManager = new NPCManager(this.scene, this.worldManager.loader, this.worldManager.textureLoader);
-        this.playerManager = new PlayerManager(this.scene, this.worldManager.loader);
+        this.playerManager = new PlayerManager(this.scene, this.worldManager.loader, this.worldManager.physicsManager, this.worldManager);
         this.soundManager = new SoundManager(this.camera);
         this.queueManager = new QueueManager(this.npcManager, this.soundManager);
 
         this.worldManager.initialize();
-        this.playerManager.loadPlayer();
-        this.npcManager.spawnNpcs();
+
+        // Delay loading player and NPCs until the world is fully loaded
+        this.worldManager.onLoaded(() => {
+            try {
+                this.playerManager.loadPlayer();
+            } catch (err) {
+                console.warn('Error loading player after world load:', err);
+            }
+            try {
+                // Adjust NPC queue root to match environment ground if available
+                try {
+                    const envBounds = this.worldManager.getEnvironmentBounds();
+                    if (envBounds && !envBounds.isEmpty()) {
+                        const groundY = envBounds.min.y ?? 0;
+                        if (this.npcManager && this.npcManager.queueConfig) {
+                            this.npcManager.queueConfig.root.y = groundY + 1.0;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Could not adjust NPC queue root from environment bounds:', e.message);
+                }
+                this.npcManager.spawnNpcs();
+            } catch (err) {
+                console.warn('Error spawning NPCs after world load:', err);
+            }
+        });
         this.soundManager.loadBooSound();
 
         this.resize(
@@ -71,6 +95,9 @@ export class ThreeWorld {
 
         if (!Number.isFinite(deltaSeconds)) return;
 
+        // Note: Physics simulation is now handled via raycasting in PlayerManager
+        // No need to update Cannon.js world separately
+
         // Camera-relative directions
         const cameraDirection = new THREE.Vector3();
         this.camera.getWorldDirection(cameraDirection);
@@ -83,6 +110,7 @@ export class ThreeWorld {
         this.playerManager.updatePlayer(deltaSeconds, cameraDirection, cameraRight);
         this.npcManager.updateNpcs(deltaSeconds);
         this.npcManager.updateGlobalDistract(deltaSeconds);
+        this.npcManager.updateCooldown(deltaSeconds);
         this.queueManager.updateQueue(deltaSeconds);
         this.queueManager.updateQueueCutting(deltaSeconds, this.playerManager.getPosition());
 
@@ -143,7 +171,8 @@ export class ThreeWorld {
             queueGapIndex: this.npcManager.gameState.queueGapIndex,
             queueGapPosition: this.npcManager.gameState.queueGapIndex !== null ?
                 this.queueManager.getQueuePosition(this.npcManager.gameState.queueGapIndex) : null,
-            canInsert: this.npcManager.canPlayerInsert()
+            canInsert: this.npcManager.canPlayerInsert(),
+            cooldownTimer: this.npcManager.gameState.cooldownTimer
         };
     }
 
@@ -205,7 +234,35 @@ export class ThreeWorld {
 
         const cameraOffset = this._getCameraOffset();
         const desiredPosition = this.playerManager.player.group.position.clone().add(cameraOffset);
-        this.camera.position.lerp(desiredPosition, 1 - Math.exp(-6 * deltaSeconds));
+
+        // Perform occlusion check: raycast from target to desired camera position
+        let finalPosition = desiredPosition.clone();
+        try {
+            const target = this.playerManager.player.group.position.clone();
+            target.y += 1.6; // camera target height
+
+            if (this.worldManager && Array.isArray(this.worldManager.worldMeshes) && this.worldManager.worldMeshes.length > 0) {
+                const dir = finalPosition.clone().sub(target);
+                const maxDist = dir.length();
+                if (maxDist > 0.001) {
+                    dir.normalize();
+                    const ray = new THREE.Raycaster(target, dir, 0.1, maxDist);
+                    const hits = ray.intersectObjects(this.worldManager.worldMeshes, true);
+                    if (hits.length > 0) {
+                        const hit = hits[0];
+                        // place camera slightly in front of the hit point
+                        finalPosition.copy(hit.point).add(dir.clone().multiplyScalar(-0.35));
+                    }
+                }
+            } else if (this.worldManager && this.worldManager.groundMesh) {
+                // fallback: ensure camera stays above simple ground plane
+                finalPosition.y = Math.max(finalPosition.y, this.worldManager.groundMesh.position.y + 0.5);
+            }
+        } catch (e) {
+            console.warn('Camera occlusion check failed:', e);
+        }
+
+        this.camera.position.lerp(finalPosition, 1 - Math.exp(-6 * deltaSeconds));
 
         this.cameraTarget.copy(this.playerManager.player.group.position);
         this.cameraTarget.y += 1.6;

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { gameContext } from '../contexts/GameContext.js';
+import { loadingScreen } from '../main.js';
 
 /**
  * MainMenuView - Pantalla de menú principal
@@ -46,8 +47,7 @@ export default class MainMenuView extends Phaser.Scene {
             .rectangle(width / 2, height / 2 + 70, 200, 50, 0x00aa00)
             .setInteractive()
             .on('pointerdown', () => {
-                gameContext.setGameState('playing');
-                this.scene.start('MainGameView');
+                this.startGameWithLoadingScreen();
             });
 
         this.add
@@ -57,5 +57,21 @@ export default class MainMenuView extends Phaser.Scene {
                 color: '#000000'
             })
             .setOrigin(0.5);
+    }
+
+    /**
+     * Inicia el juego con la pantalla de carga
+     */
+    startGameWithLoadingScreen() {
+        // Configurar callback para cuando se alcance la imagen 4
+        loadingScreen.onReachImageFour(() => {
+            // Ocultar pantalla de carga e iniciar juego
+            loadingScreen.hide();
+            gameContext.setGameState('playing');
+            this.scene.start('MainGameView');
+        });
+
+        // Mostrar pantalla de carga
+        loadingScreen.show();
     }
 }

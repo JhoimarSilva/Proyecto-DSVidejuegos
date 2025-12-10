@@ -40,3 +40,50 @@ export function setAllNpcsDistracted(npcs) {
         npc.distractionTimer = 0;
     });
 }
+
+/**
+ * Habilidad 1: Bomba de distracción - distrae a TODOS los NPCs
+ */
+export function distractAllNpcs(npcs, duration = 5000) {
+    npcs.forEach((npc) => {
+        npc.stateKey = 'distracted';
+        npc.distractionTimer = 0;
+        npc.distractionDuration = duration;
+    });
+}
+
+/**
+ * Habilidad 2: Sonido vergonzoso - distrae NPCs cercanos al jugador
+ */
+export function distractNearbyNpcs(npcs, playerPosition, radius = 5, duration = 8000) {
+    npcs.forEach((npc) => {
+        if (!npc.group) return;
+
+        const distance = npc.group.position.distanceTo(playerPosition);
+        if (distance <= radius) {
+            npc.stateKey = 'distracted';
+            npc.distractionTimer = 0;
+            npc.distractionDuration = duration;
+        }
+    });
+}
+
+/**
+ * Habilidad 3: Silbido fuerte - distrae NPCs en un área específica
+ */
+export function distractNpcsInArea(npcs, playerPosition, playerDirection, range = 8, angle = Math.PI / 3, duration = 8000) {
+    npcs.forEach((npc) => {
+        if (!npc.group) return;
+
+        const toNpc = npc.group.position.clone().sub(playerPosition).normalize();
+        const dotProduct = toNpc.dot(playerDirection);
+        const distance = npc.group.position.distanceTo(playerPosition);
+
+        // Si el NPC está dentro del cono de visión y rango
+        if (dotProduct > Math.cos(angle / 2) && distance <= range) {
+            npc.stateKey = 'distracted';
+            npc.distractionTimer = 0;
+            npc.distractionDuration = duration;
+        }
+    });
+}
