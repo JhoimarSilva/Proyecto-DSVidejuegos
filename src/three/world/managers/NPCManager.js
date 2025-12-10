@@ -109,7 +109,8 @@ export class NPCManager {
                         duration: this.queueConfig.moveDuration,
                         active: false
                     },
-                    distractionTimer: Math.random() * 8
+                    distractionTimer: Math.random() * 8,
+                    distractionDuration: 0
                 };
 
                 if (gltf.animations?.length) {
@@ -235,6 +236,18 @@ export class NPCManager {
                     npc.stateKey = 'distracted';
                     this._applySpriteTexture(npc.sprite, 'distracted');
                 }
+            } else if (npc.distractionDuration > 0) {
+                // Handle forced distraction (abilities) - duration is in milliseconds
+                npc.distractionDuration -= deltaSeconds * 1000;
+                if (npc.stateKey !== 'distracted' && npc.stateKey !== 'angry') {
+                    npc.stateKey = 'distracted';
+                    this._applySpriteTexture(npc.sprite, 'distracted');
+                }
+                if (npc.distractionDuration <= 0) {
+                    npc.distractionDuration = 0;
+                    // Resume normal cycle but randomize slightly to avoid sync
+                    npc.distractionTimer = Math.random() * 8;
+                }
             } else {
                 npc.distractionTimer = (npc.distractionTimer ?? 0) + deltaSeconds;
                 const totalCycle = 16;
@@ -349,8 +362,43 @@ export class NPCManager {
         }
     }
 
-    canPlayerInsert() {
-        return this.npcs.every(npc => npc.stateKey === 'distracted');
+    canPlayerInsert(targetIndex = null) {
+        if (targetIndex === null) {
+            // If no index provided, check if ALL are distracted (legacy/strict mode)
+            // Or we could check if ANY gap is safe?
+            // For now, let's keep it strict for general query, but maybe relax it if we want the UI to show green even if only some are distracted.
+            // Let's relax it: return true if there is at least one safe gap?
+            // Actually, the UI uses this to show if insertion is possible.
+            // If we return true here, the UI might say "Press E", but if the player is at a dangerous spot, they get caught.
+            // So for general query without index, maybe we should rely on the caller to pass the index.
+            // If the caller doesn't pass index, they probably mean "is it safe generally?".
+            // Let's stick to the previous behavior if no index is passed, OR check if the current queueGapIndex is safe.
+            if (this.gameState.queueGapIndex !== null) {
+                return this._areNeighborsDistracted(this.gameState.queueGapIndex);
+            }
+            return this.npcs.every(npc => npc.stateKey === 'distracted');
+        }
+
+        return this._areNeighborsDistracted(targetIndex);
+    }
+
+    _areNeighborsDistracted(index) {
+        // Check the NPC at the index (who will be pushed back) and the one before it (who will be behind)
+        // If index is 0, check NPC 0.
+        // If index is length, check NPC length-1.
+
+        // Let's check a small radius around the insertion point.
+        // The most critical one is the one we are stepping in front of (index)
+        // and the one we are stepping behind (index-1).
+
+        const npcAtSpot = this.npcs.find(n => n.queueIndex === index);
+        const npcBehind = this.npcs.find(n => n.queueIndex === index - 1);
+
+        let safe = true;
+        if (npcAtSpot && npcAtSpot.stateKey !== 'distracted') safe = false;
+        if (npcBehind && npcBehind.stateKey !== 'distracted') safe = false;
+
+        return safe;
     }
 
     resetGameState() {

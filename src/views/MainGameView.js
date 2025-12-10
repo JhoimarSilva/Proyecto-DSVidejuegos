@@ -411,7 +411,7 @@ export default class MainGameView extends Phaser.Scene {
         const playerPosition = this.threeWorld.playerManager?.getPosition();
         const npcs = this.threeWorld.npcManager?.npcs;
         if (npcs && playerPosition) {
-            distractNearbyNpcs(npcs, playerPosition, 5, 4000);
+            distractNearbyNpcs(npcs, playerPosition);
         }
 
         // Feedback visual
@@ -435,7 +435,7 @@ export default class MainGameView extends Phaser.Scene {
             cameraDirection.y = 0; // Proyectar en el plano horizontal
             cameraDirection.normalize();
 
-            distractNpcsInArea(npcs, playerPosition, cameraDirection, 8, Math.PI / 3, 3000);
+            distractNpcsInArea(npcs, playerPosition, cameraDirection);
         }
 
         // Feedback visual

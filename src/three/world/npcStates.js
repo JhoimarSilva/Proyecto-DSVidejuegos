@@ -55,11 +55,11 @@ export function distractAllNpcs(npcs, duration = 5000) {
 /**
  * Habilidad 2: Sonido vergonzoso - distrae NPCs cercanos al jugador
  */
-export function distractNearbyNpcs(npcs, playerPosition, radius = 5, duration = 4000) {
+export function distractNearbyNpcs(npcs, playerPosition, radius = 5, duration = 8000) {
     npcs.forEach((npc) => {
-        if (!npc.mesh) return;
+        if (!npc.group) return;
 
-        const distance = npc.mesh.position.distanceTo(playerPosition);
+        const distance = npc.group.position.distanceTo(playerPosition);
         if (distance <= radius) {
             npc.stateKey = 'distracted';
             npc.distractionTimer = 0;
@@ -71,13 +71,13 @@ export function distractNearbyNpcs(npcs, playerPosition, radius = 5, duration = 
 /**
  * Habilidad 3: Silbido fuerte - distrae NPCs en un área específica
  */
-export function distractNpcsInArea(npcs, playerPosition, playerDirection, range = 8, angle = Math.PI / 3, duration = 3000) {
+export function distractNpcsInArea(npcs, playerPosition, playerDirection, range = 8, angle = Math.PI / 3, duration = 8000) {
     npcs.forEach((npc) => {
-        if (!npc.mesh) return;
+        if (!npc.group) return;
 
-        const toNpc = npc.mesh.position.clone().sub(playerPosition).normalize();
+        const toNpc = npc.group.position.clone().sub(playerPosition).normalize();
         const dotProduct = toNpc.dot(playerDirection);
-        const distance = npc.mesh.position.distanceTo(playerPosition);
+        const distance = npc.group.position.distanceTo(playerPosition);
 
         // Si el NPC está dentro del cono de visión y rango
         if (dotProduct > Math.cos(angle / 2) && distance <= range) {
