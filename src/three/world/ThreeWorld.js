@@ -232,7 +232,35 @@ export class ThreeWorld {
 
         const cameraOffset = this._getCameraOffset();
         const desiredPosition = this.playerManager.player.group.position.clone().add(cameraOffset);
-        this.camera.position.lerp(desiredPosition, 1 - Math.exp(-6 * deltaSeconds));
+
+        // Perform occlusion check: raycast from target to desired camera position
+        let finalPosition = desiredPosition.clone();
+        try {
+            const target = this.playerManager.player.group.position.clone();
+            target.y += 1.6; // camera target height
+
+            if (this.worldManager && Array.isArray(this.worldManager.worldMeshes) && this.worldManager.worldMeshes.length > 0) {
+                const dir = finalPosition.clone().sub(target);
+                const maxDist = dir.length();
+                if (maxDist > 0.001) {
+                    dir.normalize();
+                    const ray = new THREE.Raycaster(target, dir, 0.1, maxDist);
+                    const hits = ray.intersectObjects(this.worldManager.worldMeshes, true);
+                    if (hits.length > 0) {
+                        const hit = hits[0];
+                        // place camera slightly in front of the hit point
+                        finalPosition.copy(hit.point).add(dir.clone().multiplyScalar(-0.35));
+                    }
+                }
+            } else if (this.worldManager && this.worldManager.groundMesh) {
+                // fallback: ensure camera stays above simple ground plane
+                finalPosition.y = Math.max(finalPosition.y, this.worldManager.groundMesh.position.y + 0.5);
+            }
+        } catch (e) {
+            console.warn('Camera occlusion check failed:', e);
+        }
+
+        this.camera.position.lerp(finalPosition, 1 - Math.exp(-6 * deltaSeconds));
 
         this.cameraTarget.copy(this.playerManager.player.group.position);
         this.cameraTarget.y += 1.6;
