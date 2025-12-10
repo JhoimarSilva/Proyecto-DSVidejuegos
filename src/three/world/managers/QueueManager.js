@@ -154,7 +154,7 @@ export class QueueManager {
             queueIndex = this.getNearestQueueIndex(playerGroup.position);
         }
 
-        if (!this.npcManager.canPlayerInsert()) {
+        if (!this.npcManager.canPlayerInsert(queueIndex)) {
             this.npcManager.playerCaught(this.soundManager);
             return false;
         }
@@ -278,7 +278,7 @@ export class QueueManager {
 
     movePlayerToQueueIndex(playerGroup, newIndex) {
         if (!this.gameState.playerInQueue) return false;
-        if (!this.npcManager.canPlayerInsert()) {
+        if (!this.npcManager.canPlayerInsert(newIndex)) {
             this.npcManager.playerCaught(this.soundManager);
             return false;
         }

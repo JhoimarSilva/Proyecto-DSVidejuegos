@@ -110,6 +110,7 @@ export class ThreeWorld {
         this.playerManager.updatePlayer(deltaSeconds, cameraDirection, cameraRight);
         this.npcManager.updateNpcs(deltaSeconds);
         this.npcManager.updateGlobalDistract(deltaSeconds);
+        this.npcManager.updateCooldown(deltaSeconds);
         this.queueManager.updateQueue(deltaSeconds);
         this.queueManager.updateQueueCutting(deltaSeconds, this.playerManager.getPosition());
 
@@ -170,7 +171,8 @@ export class ThreeWorld {
             queueGapIndex: this.npcManager.gameState.queueGapIndex,
             queueGapPosition: this.npcManager.gameState.queueGapIndex !== null ?
                 this.queueManager.getQueuePosition(this.npcManager.gameState.queueGapIndex) : null,
-            canInsert: this.npcManager.canPlayerInsert()
+            canInsert: this.npcManager.canPlayerInsert(),
+            cooldownTimer: this.npcManager.gameState.cooldownTimer
         };
     }
 
