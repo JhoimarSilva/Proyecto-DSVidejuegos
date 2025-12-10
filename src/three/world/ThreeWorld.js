@@ -4,6 +4,7 @@ import { PlayerManager } from './managers/PlayerManager.js';
 import { SoundManager } from './managers/SoundManager.js';
 import { QueueManager } from './managers/QueueManager.js';
 import { WorldManager } from './WorldManager.js';
+import { PerformanceMonitor } from '../../utils/PerformanceMonitor.js';
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
@@ -40,6 +41,9 @@ export class ThreeWorld {
         this.parentElement.appendChild(this.domElement);
 
         this.clock = new THREE.Clock();
+
+        // Initialize performance monitor (controlled by VITE_SHOW_PERFORMANCE env var)
+        this.performanceMonitor = new PerformanceMonitor();
 
         // Initialize managers
         this.worldManager = new WorldManager(this.scene, this.renderer);
@@ -139,6 +143,9 @@ export class ThreeWorld {
         }
 
         this._updateCamera(deltaSeconds);
+
+        // Update performance monitor
+        this.performanceMonitor.update();
 
         this.renderer.render(this.scene, this.camera);
     }
