@@ -44,13 +44,37 @@ export class ThreeWorld {
         // Initialize managers
         this.worldManager = new WorldManager(this.scene, this.renderer);
         this.npcManager = new NPCManager(this.scene, this.worldManager.loader, this.worldManager.textureLoader);
-        this.playerManager = new PlayerManager(this.scene, this.worldManager.loader);
+        this.playerManager = new PlayerManager(this.scene, this.worldManager.loader, this.worldManager.physicsManager, this.worldManager);
         this.soundManager = new SoundManager(this.camera);
         this.queueManager = new QueueManager(this.npcManager, this.soundManager);
 
         this.worldManager.initialize();
-        this.playerManager.loadPlayer();
-        this.npcManager.spawnNpcs();
+
+        // Delay loading player and NPCs until the world is fully loaded
+        this.worldManager.onLoaded(() => {
+            try {
+                this.playerManager.loadPlayer();
+            } catch (err) {
+                console.warn('Error loading player after world load:', err);
+            }
+            try {
+                // Adjust NPC queue root to match environment ground if available
+                try {
+                    const envBounds = this.worldManager.getEnvironmentBounds();
+                    if (envBounds && !envBounds.isEmpty()) {
+                        const groundY = envBounds.min.y ?? 0;
+                        if (this.npcManager && this.npcManager.queueConfig) {
+                            this.npcManager.queueConfig.root.y = groundY + 1.0;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Could not adjust NPC queue root from environment bounds:', e.message);
+                }
+                this.npcManager.spawnNpcs();
+            } catch (err) {
+                console.warn('Error spawning NPCs after world load:', err);
+            }
+        });
         this.soundManager.loadBooSound();
 
         this.resize(
@@ -70,6 +94,9 @@ export class ThreeWorld {
         const deltaSeconds = deltaMs ? deltaMs / 1000 : this.clock.getDelta();
 
         if (!Number.isFinite(deltaSeconds)) return;
+
+        // Note: Physics simulation is now handled via raycasting in PlayerManager
+        // No need to update Cannon.js world separately
 
         // Camera-relative directions
         const cameraDirection = new THREE.Vector3();
