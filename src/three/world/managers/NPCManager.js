@@ -27,7 +27,7 @@ export class NPCManager {
         this.textureLoader = textureLoader;
         this.npcs = [];
         this.queueConfig = {
-            root: new THREE.Vector3(45, 4, 0),
+            root: new THREE.Vector3(36, 4, 0),
             direction: new THREE.Vector3(0, 0, -1).normalize(),
             spacing: 1.8,
             advanceInterval: 10,
@@ -61,6 +61,15 @@ export class NPCManager {
         };
         this.gameState.cooldownTimer = 0;
         this.gameState.cooldownDuration = 15;
+        
+        // Game won tracking
+        this.gameState.gameWon = false;
+
+        // Create win trigger at queue start
+        this.winTrigger = this._createWinTrigger();
+        if (this.winTrigger) {
+            this.scene.add(this.winTrigger);
+        }
     }
 
     spawnNpcs() {
@@ -247,6 +256,40 @@ export class NPCManager {
     setQueueHeight(offset) {
         this.queueConfig.heightOffset = Number(offset) || 0;
         console.log('NPCManager: queue height offset set to', this.queueConfig.heightOffset);
+    }
+
+    /**
+     * Create an invisible trigger box at the end of the queue.
+     * This is used to detect when the player reaches the goal.
+     */
+    _createWinTrigger() {
+        // Position: at the end of the queue (after all NPCs)
+        // Calculate position based on NPC_COUNT and spacing
+        const endPos = this.queueConfig.root.clone()
+            .add(this.queueConfig.direction.clone().multiplyScalar(NPC_COUNT * this.queueConfig.spacing + 10)); // 2 units past last NPC
+
+        // Create a box geometry for collision detection
+        const geometry = new THREE.BoxGeometry(5, 5, 5); // width, height, depth
+        const material = new THREE.MeshBasicMaterial({
+            transparent: true,
+            opacity: 0,
+            side: THREE.DoubleSide
+        });
+        const trigger = new THREE.Mesh(geometry, material);
+        trigger.position.copy(endPos);
+        trigger.userData.isWinTrigger = true; // Mark as trigger
+        return trigger;
+    }
+
+    /**
+     * Check if a given position is inside the win trigger.
+     */
+    isPlayerInWinTrigger(playerPosition) {
+        if (!this.winTrigger) return false;
+        
+        // Use bounding box for collision detection
+        const triggerBbox = new THREE.Box3().setFromObject(this.winTrigger);
+        return triggerBbox.containsPoint(playerPosition);
     }
 
     updateNpcs(deltaSeconds) {

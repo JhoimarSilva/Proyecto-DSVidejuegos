@@ -232,6 +232,37 @@ export default class MainGameView extends Phaser.Scene {
             .setDepth(501)
             .setScrollFactor(0)
             .setVisible(false);
+
+        // Win overlay (hidden initially)
+        this.winOverlay = this.add
+            .rectangle(window.innerWidth / 2, window.innerHeight / 2, window.innerWidth, window.innerHeight, 0x000000)
+            .setDepth(500)
+            .setScrollFactor(0)
+            .setAlpha(0.7)
+            .setVisible(false);
+
+        this.winText = this.add
+            .text(window.innerWidth / 2, window.innerHeight / 2 - 40, '¡GANASTE!', {
+                fontFamily: 'monospace',
+                fontSize: '48px',
+                color: '#ffffff',
+                fontStyle: 'bold'
+            })
+            .setOrigin(0.5)
+            .setDepth(501)
+            .setScrollFactor(0)
+            .setVisible(false);
+
+        this.winHint = this.add
+            .text(window.innerWidth / 2, window.innerHeight / 2 + 10, 'Presiona cualquier tecla para volver al menú', {
+                fontFamily: 'monospace',
+                fontSize: '18px',
+                color: '#ffffff'
+            })
+            .setOrigin(0.5)
+            .setDepth(501)
+            .setScrollFactor(0)
+            .setVisible(false);
     }
 
     _createControls() {
@@ -358,6 +389,37 @@ export default class MainGameView extends Phaser.Scene {
             this.gameOverHint?.setVisible(false);
             this._gameOverKeyHandlerAdded = false;
         }
+
+        // Mostrar Win si corresponde
+        if (gameState.gameWon) {
+            // Hide other UI elements
+            this.queueGapButton.setVisible(false);
+            if (buttonText) buttonText.setVisible(false);
+            this.cooldownText.setVisible(false);
+
+            // Show win overlay and hint
+            this.winOverlay?.setVisible(true);
+            this.winText?.setVisible(true);
+            this.winHint?.setVisible(true);
+
+            if (!this._gameOverKeyHandlerAdded) {
+                this._gameOverKeyHandlerAdded = true;
+                this.input.keyboard.once('keydown', () => {
+                    try {
+                        this.threeWorld?.destroy();
+                    } catch (e) {
+                        console.warn('Error destroying threeWorld during win navigation:', e);
+                    }
+                    this.scene.start('MainMenuView');
+                });
+            }
+
+            return;
+        } else {
+            this.winOverlay?.setVisible(false);
+            this.winText?.setVisible(false);
+            this.winHint?.setVisible(false);
+        }
     }
 
     _tryInsertInQueue() {
@@ -402,6 +464,20 @@ export default class MainGameView extends Phaser.Scene {
             if (this.gameOverHint) {
                 this.gameOverHint.x = width / 2;
                 this.gameOverHint.y = height / 2 + 10;
+            }
+            if (this.winOverlay) {
+                this.winOverlay.x = width / 2;
+                this.winOverlay.y = height / 2;
+                this.winOverlay.width = width;
+                this.winOverlay.height = height;
+            }
+            if (this.winText) {
+                this.winText.x = width / 2;
+                this.winText.y = height / 2 - 40;
+            }
+            if (this.winHint) {
+                this.winHint.x = width / 2;
+                this.winHint.y = height / 2 + 10;
             }
             if (this.queueGapButton) {
                 this.queueGapButton.x = width / 2;

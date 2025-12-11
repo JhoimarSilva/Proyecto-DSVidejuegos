@@ -117,6 +117,19 @@ export class ThreeWorld {
         // Update player queue movement if active (insertion/exit)
         this._updatePlayerQueueMovement(deltaSeconds);
 
+        // Check win condition: player touched the win trigger
+        try {
+            const playerPos = this.playerManager.getPosition();
+            if (playerPos && this.npcManager && !this.npcManager.gameState.gameWon && !this.npcManager.gameState.gameOver) {
+                if (this.npcManager.isPlayerInWinTrigger(playerPos)) {
+                    this.npcManager.gameState.gameWon = true;
+                    console.log('Player touched win trigger: WIN');
+                }
+            }
+        } catch (e) {
+            console.warn('Error checking win trigger:', e);
+        }
+
         // Continuous movement with queue
         if (this.npcManager.gameState.playerInQueue && this.queueManager.isWalking()) {
             const player = this.playerManager.player;
@@ -172,10 +185,10 @@ export class ThreeWorld {
             queueGapPosition: this.npcManager.gameState.queueGapIndex !== null ?
                 this.queueManager.getQueuePosition(this.npcManager.gameState.queueGapIndex) : null,
             canInsert: this.npcManager.canPlayerInsert(),
-            cooldownTimer: this.npcManager.gameState.cooldownTimer
-            ,
+            cooldownTimer: this.npcManager.gameState.cooldownTimer,
             lives: this.npcManager.gameState.lives,
-            gameOver: this.npcManager.gameState.gameOver
+            gameOver: this.npcManager.gameState.gameOver,
+            gameWon: this.npcManager.gameState.gameWon
         };
     }
 
