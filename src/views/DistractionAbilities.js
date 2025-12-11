@@ -3,9 +3,7 @@ export class DistractionAbilities {
         this.scene = scene;
         this.abilities = [];
         this.cooldowns = {
-            bomb: 0,
-            sound: 0,
-            whistle: 0
+            bomb: 0
         };
         this.cooldownDuration = 10000; // 10 segundos
         this.container = null;
@@ -27,7 +25,7 @@ export class DistractionAbilities {
         this.container.setDepth(200);
         this.container.setScrollFactor(0);
 
-        // Habilidad 1: Bomba de distracción
+        // Habilidad: Bomba de distracción (solo habilidad disponible)
         this.abilities.push(this._createAbilityButton(
             startX,
             baseY,
@@ -35,26 +33,6 @@ export class DistractionAbilities {
             '💣',
             0xff6b35,
             'bomb'
-        ));
-
-        // Habilidad 2: Sonido vergonzoso
-        this.abilities.push(this._createAbilityButton(
-            startX + spacing,
-            baseY,
-            '2',
-            '📢',
-            0xffd700,
-            'sound'
-        ));
-
-        // Habilidad 3: Silbido fuerte
-        this.abilities.push(this._createAbilityButton(
-            startX + spacing * 2,
-            baseY,
-            '3',
-            '👄',
-            0x4ecdc4,
-            'whistle'
         ));
     }
 

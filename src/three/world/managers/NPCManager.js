@@ -49,6 +49,10 @@ export class NPCManager {
             globalDistractTimer: 0,
             globalDistractActive: false
         };
+        // Lives and game over tracking
+        this.gameState.startLives = 3;
+        this.gameState.lives = this.gameState.startLives;
+        this.gameState.gameOver = false;
         this.queueCycle = {
             timer: 0,
             walkTime: 5,
@@ -366,8 +370,19 @@ export class NPCManager {
     playerCaught(soundManager = null) {
         if (this.gameState.playerCaught) return; // Already caught
 
+        // Mark as caught
         this.gameState.playerCaught = true;
-        this.gameState.cooldownTimer = this.gameState.cooldownDuration;
+
+        // Decrement lives
+        this.gameState.lives = Math.max(0, (this.gameState.lives || this.gameState.startLives) - 1);
+
+        // If lives exhausted -> game over, don't set cooldown
+        if (this.gameState.lives <= 0) {
+            this.gameState.gameOver = true;
+            this.gameState.cooldownTimer = 0;
+        } else {
+            this.gameState.cooldownTimer = this.gameState.cooldownDuration;
+        }
 
         setAllNpcsAngry(this.npcs);
         this.npcs.forEach((npc) => {
@@ -427,6 +442,9 @@ export class NPCManager {
             npc.distractionTimer = 0;
             this._applySpriteTexture(npc.sprite, npc.stateKey);
         });
+        // Reset lives and game over flag
+        this.gameState.lives = this.gameState.startLives;
+        this.gameState.gameOver = false;
     }
 
     getGameState() {
@@ -438,6 +456,9 @@ export class NPCManager {
             queueGapIndex: this.gameState.queueGapIndex,
             queueGapPosition: this.gameState.queueGapIndex !== null ? this._getQueuePosition(this.gameState.queueGapIndex) : null,
             cooldownTimer: this.gameState.cooldownTimer
+            ,
+            lives: this.gameState.lives,
+            gameOver: this.gameState.gameOver
         };
     }
 }
