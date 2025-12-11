@@ -18,7 +18,7 @@ const NPC_POOL = [
     '/models/woman6.glb'
 ];
 
-const NPC_COUNT = 15;
+const NPC_COUNT = 25;
 
 export class NPCManager {
     constructor(scene, loader, textureLoader) {
@@ -27,7 +27,7 @@ export class NPCManager {
         this.textureLoader = textureLoader;
         this.npcs = [];
         this.queueConfig = {
-            root: new THREE.Vector3(36, 4, 0),
+            root: new THREE.Vector3(36, 4, 20),
             direction: new THREE.Vector3(0, 0, -1).normalize(),
             spacing: 1.8,
             advanceInterval: 10,
