@@ -118,6 +118,17 @@ export default class MainGameView extends Phaser.Scene {
             .setDepth(10)
             .setScrollFactor(0);
 
+        // Mostrar indicador de vidas (corazones)
+        this.livesText = this.add
+            .text(16, 48, '❤️ ❤️ ❤️', {
+                fontFamily: 'monospace',
+                fontSize: '24px',
+                color: '#ff0000'
+            })
+            .setDepth(10)
+            .setScrollFactor(0)
+            .setName('livesText');
+
         // this.add
         //     .text(16, 48, 'Mover: WASD / Flechas', {
         //         ...style,
@@ -326,6 +337,13 @@ export default class MainGameView extends Phaser.Scene {
 
         const gameState = this.threeWorld.getGameState();
 
+        // Update lives display
+        if (this.livesText) {
+            const lives = gameState.lives ?? 3;
+            const hearts = '❤️ '.repeat(lives);
+            this.livesText.setText(hearts);
+        }
+
         // Update cooldown text
         if (gameState.playerCaught && gameState.cooldownTimer > 0) {
             this.cooldownText.setText(`¡Descubierto! Espera: ${Math.ceil(gameState.cooldownTimer)}s`);
@@ -491,6 +509,11 @@ export default class MainGameView extends Phaser.Scene {
             if (this.cooldownText) {
                 this.cooldownText.x = width / 2;
                 this.cooldownText.y = height / 2;
+            }
+            const livesText = this.children.getByName('livesText');
+            if (livesText) {
+                livesText.x = 16;
+                livesText.y = 48;
             }
         } catch (e) {
             // ignore

@@ -111,19 +111,24 @@ export class ThreeWorld {
         this.npcManager.updateNpcs(deltaSeconds);
         this.npcManager.updateGlobalDistract(deltaSeconds);
         this.npcManager.updateCooldown(deltaSeconds);
+        this.npcManager.updateNpcTriggerCollisions(); // Check if NPCs reached the goal zone
         this.queueManager.updateQueue(deltaSeconds);
         this.queueManager.updateQueueCutting(deltaSeconds, this.playerManager.getPosition());
 
         // Update player queue movement if active (insertion/exit)
         this._updatePlayerQueueMovement(deltaSeconds);
 
-        // Check win condition: player touched the win trigger
+        // Check win condition: player is in trigger AND not currently caught
+        // This encourages stealth gameplay rather than just spamming abilities
         try {
             const playerPos = this.playerManager.getPosition();
             if (playerPos && this.npcManager && !this.npcManager.gameState.gameWon && !this.npcManager.gameState.gameOver) {
-                if (this.npcManager.isPlayerInWinTrigger(playerPos)) {
+                const inTrigger = this.npcManager.isPlayerInWinTrigger(playerPos);
+                const notCaught = !this.npcManager.gameState.playerCaught;
+                
+                if (inTrigger && notCaught) {
                     this.npcManager.gameState.gameWon = true;
-                    console.log('Player touched win trigger: WIN');
+                    console.log('Player reached goal safely: WIN');
                 }
             }
         } catch (e) {

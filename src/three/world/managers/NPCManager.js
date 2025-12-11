@@ -292,6 +292,58 @@ export class NPCManager {
         return triggerBbox.containsPoint(playerPosition);
     }
 
+    /**
+     * Check if an NPC is inside the win trigger and remove it if so.
+     */
+    updateNpcTriggerCollisions() {
+        if (!this.winTrigger) return;
+        
+        const triggerBbox = new THREE.Box3().setFromObject(this.winTrigger);
+        
+        // Iterate backwards to safely remove NPCs
+        for (let i = this.npcs.length - 1; i >= 0; i--) {
+            const npc = this.npcs[i];
+            if (npc && npc.group && triggerBbox.containsPoint(npc.group.position)) {
+                this._removeNpc(i);
+            }
+        }
+    }
+
+    /**
+     * Remove an NPC from the scene and array.
+     */
+    _removeNpc(index) {
+        if (index < 0 || index >= this.npcs.length) return;
+        
+        const npc = this.npcs[index];
+        if (npc) {
+            // Remove mesh from scene
+            if (npc.group && npc.group.parent) {
+                npc.group.parent.remove(npc.group);
+            }
+            // Remove sprite
+            if (npc.sprite && npc.sprite.parent) {
+                npc.sprite.parent.remove(npc.sprite);
+            }
+            // Dispose of materials and geometries
+            if (npc.group) {
+                npc.group.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach(mat => mat.dispose());
+                        } else {
+                            child.material.dispose();
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Remove from array
+        this.npcs.splice(index, 1);
+    }
+
     updateNpcs(deltaSeconds) {
         this.npcs.forEach((npc) => {
             npc.mixer?.update(deltaSeconds * 0.5);
