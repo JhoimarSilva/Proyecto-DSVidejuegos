@@ -111,11 +111,29 @@ export class ThreeWorld {
         this.npcManager.updateNpcs(deltaSeconds);
         this.npcManager.updateGlobalDistract(deltaSeconds);
         this.npcManager.updateCooldown(deltaSeconds);
+        this.npcManager.updateNpcTriggerCollisions(); // Check if NPCs reached the goal zone
         this.queueManager.updateQueue(deltaSeconds);
         this.queueManager.updateQueueCutting(deltaSeconds, this.playerManager.getPosition());
 
         // Update player queue movement if active (insertion/exit)
         this._updatePlayerQueueMovement(deltaSeconds);
+
+        // Check win condition: player is in trigger AND not currently caught
+        // This encourages stealth gameplay rather than just spamming abilities
+        try {
+            const playerPos = this.playerManager.getPosition();
+            if (playerPos && this.npcManager && !this.npcManager.gameState.gameWon && !this.npcManager.gameState.gameOver) {
+                const inTrigger = this.npcManager.isPlayerInWinTrigger(playerPos);
+                const notCaught = !this.npcManager.gameState.playerCaught;
+                
+                if (inTrigger && notCaught) {
+                    this.npcManager.gameState.gameWon = true;
+                    console.log('Player reached goal safely: WIN');
+                }
+            }
+        } catch (e) {
+            console.warn('Error checking win trigger:', e);
+        }
 
         // Continuous movement with queue
         if (this.npcManager.gameState.playerInQueue && this.queueManager.isWalking()) {
@@ -172,7 +190,10 @@ export class ThreeWorld {
             queueGapPosition: this.npcManager.gameState.queueGapIndex !== null ?
                 this.queueManager.getQueuePosition(this.npcManager.gameState.queueGapIndex) : null,
             canInsert: this.npcManager.canPlayerInsert(),
-            cooldownTimer: this.npcManager.gameState.cooldownTimer
+            cooldownTimer: this.npcManager.gameState.cooldownTimer,
+            lives: this.npcManager.gameState.lives,
+            gameOver: this.npcManager.gameState.gameOver,
+            gameWon: this.npcManager.gameState.gameWon
         };
     }
 

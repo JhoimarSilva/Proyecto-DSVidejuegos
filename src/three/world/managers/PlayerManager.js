@@ -55,20 +55,20 @@ export class PlayerManager {
                 group.add(model);
 
                 // Choose spawn position based on world bounds if available
-                let spawnPos = new THREE.Vector3(0, 5, 0);
-                try {
-                    if (this.worldManager && this.worldManager.getEnvironmentBounds) {
-                        const envBounds = this.worldManager.getEnvironmentBounds();
-                        if (envBounds && !envBounds.isEmpty()) {
-                            const center = new THREE.Vector3();
-                            envBounds.getCenter(center);
-                            spawnPos.copy(center);
-                            spawnPos.y = (envBounds.min.y ?? 0) + 1.6; // slightly above ground (raised)
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Could not determine spawn position from worldManager:', e.message);
-                }
+                let spawnPos = new THREE.Vector3(-40, 10, -8);
+                // try {
+                //     if (this.worldManager && this.worldManager.getEnvironmentBounds) {
+                //         const envBounds = this.worldManager.getEnvironmentBounds();
+                //         if (envBounds && !envBounds.isEmpty()) {
+                //             const center = new THREE.Vector3();
+                //             envBounds.getCenter(center);
+                //             spawnPos.copy(center);
+                //             spawnPos.y = (envBounds.min.y ?? 0) + 1.6; // slightly above ground (raised)
+                //         }
+                //     }
+                // } catch (e) {
+                //     console.warn('Could not determine spawn position from worldManager:', e.message);
+                // }
 
                 group.position.copy(spawnPos);
                 this.scene.add(group);
